@@ -198,7 +198,7 @@ async function submitOrder(event) {
   }
 }
 
-document.querySelectorAll(".product-card").forEach(card => {
+document.querySelectorAll(".product-card[data-product-id]").forEach(card => {
   card.querySelector(".add-button").addEventListener("click", () => addToCart(card.dataset.productId));
 });
 
