@@ -87,6 +87,16 @@ Stock tracking is off by default. Enable it only after entering a verified avail
 quantity. Different pack sizes should be created as separate product records with
 unique IDs so each variant has an independent price and stock count.
 
+## Customer order tracking
+
+Customers can track an order at `/track-order/` using the order number and the
+matching checkout phone number. The page shows the current fulfilment stage, items,
+total and last update, but never exposes the delivery address.
+
+Tracking lookups use prepared queries, CSRF protection, generic failure messages,
+session-based throttling, private no-store responses and search-engine blocking.
+Cancelled orders display the support phone number instead of an active timeline.
+
 ## Order security
 
 - The browser submits only product IDs and quantities.
