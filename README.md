@@ -116,6 +116,9 @@ Run `database/migrate_razorpay_payments.sql` once before enabling Razorpay. Set
 variables. Checkout creates the Razorpay order on the server and marks an order
 paid only after signature, gateway order, captured status, currency and amount
 are all verified server-side.
+Run `database/migrate_payment_webhooks.sql` to add idempotent webhook-event storage.
+The public `razorpay_webhook.php` endpoint requires `F2H_RAZORPAY_WEBHOOK_SECRET`
+and verifies the raw request body before processing captured or failed payments.
 
 After checkout, customers receive a clear on-screen receipt containing their order
 number and a direct link to the tracking page. The admin orders table includes a
