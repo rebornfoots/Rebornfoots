@@ -271,7 +271,7 @@ $reorderItems = $order
           </div>
           <aside>
             <div><span>Order total</span><strong>₹<?= number_format((float) $order['total'], 0) ?></strong></div>
-            <div><span>Payment</span><strong><?= escape($order['payment_method']) ?> · <?= escape(ucfirst((string) $order['payment_status'])) ?></strong></div>
+            <div><span>Payment</span><strong><?= escape($order['payment_method']) ?> · <?= escape(ucwords(str_replace('_', ' ', (string) $order['payment_status']))) ?></strong></div>
             <?php if ($order['postal_code'] !== null): ?><div><span>Delivery PIN</span><strong><?= escape($order['postal_code']) ?></strong></div><?php endif; ?>
             <div><span>Last updated</span><strong><?= escape(date('d M Y, g:i A', strtotime((string) $order['updated_at']))) ?></strong></div>
           </aside>

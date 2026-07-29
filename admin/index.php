@@ -104,6 +104,37 @@ if (!adminIsAuthenticated()) {
 
 requireAdmin();
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'refund_order') {
+    if (!validCsrf($_POST['csrf_token'] ?? null)) {
+        flash('error', 'Your session expired. Please try again.');
+    } else {
+        $orderId = filter_var($_POST['order_id'] ?? null, FILTER_VALIDATE_INT);
+        $confirmed = (string) ($_POST['confirm_refund'] ?? '') === 'yes';
+        if ($orderId === false || $orderId < 1 || !$confirmed) {
+            flash('error', 'Confirm the full refund before continuing.');
+        } else {
+            try {
+                $refund = requestRazorpayRefund($orderId);
+                flash(
+                    'success',
+                    $refund['status'] === 'processed'
+                        ? "Order #{$orderId} was refunded successfully."
+                        : "Refund started for order #{$orderId}. Razorpay confirmation is pending."
+                );
+            } catch (DomainException $error) {
+                flash('error', $error->getMessage());
+            } catch (Throwable $error) {
+                error_log('InbornFoot admin refund error: ' . $error->getMessage());
+                flash('error', $error->getMessage() === 'Razorpay could not start the refund. You can safely retry.'
+                    ? $error->getMessage()
+                    : 'The refund could not be started. Check the server log before retrying.');
+            }
+        }
+    }
+    header('Location: /admin/' . safeReturnQuery($_POST['return_query'] ?? ''));
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_status') {
     if (!validCsrf($_POST['csrf_token'] ?? null)) {
         flash('error', 'Your session expired. Please try again.');
@@ -237,12 +268,12 @@ try {
     $types = '';
     $parameters = [];
     if ($status !== '') {
-        $conditions[] = 'status = ?';
+        $conditions[] = 'orders.status = ?';
         $types .= 's';
         $parameters[] = $status;
     }
     if ($search !== '') {
-        $conditions[] = '(CAST(id AS CHAR) = ? OR customer_name LIKE ? OR phone LIKE ?)';
+        $conditions[] = '(CAST(orders.id AS CHAR) = ? OR customer_name LIKE ? OR phone LIKE ?)';
         $types .= 'sss';
         $parameters[] = ltrim($search, '#');
         $likeSearch = '%' . $search . '%';
@@ -263,10 +294,16 @@ try {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $query = 'SELECT id, customer_name, phone, address, postal_code, payment_method, payment_status,
-                     gateway_order_id, gateway_payment_id, order_details, total, status,
-                     courier_name, tracking_number, tracking_url, estimated_delivery_date, created_at, updated_at
-              FROM orders' . $where . ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
+    $query = 'SELECT orders.id, customer_name, phone, address, postal_code, payment_method, payment_status,
+                     gateway_order_id, orders.gateway_payment_id, order_details, total, orders.status,
+                     courier_name, tracking_number, tracking_url, estimated_delivery_date,
+                     orders.created_at, orders.updated_at
+                     , payment_refunds.gateway_refund_id AS refund_id,
+                     payment_refunds.status AS refund_status,
+                     payment_refunds.failure_reason AS refund_failure_reason
+              FROM orders
+              LEFT JOIN payment_refunds ON payment_refunds.order_id = orders.id'
+              . $where . ' ORDER BY orders.created_at DESC, orders.id DESC LIMIT ? OFFSET ?';
     $queryStatement = database()->prepare($query);
     $queryTypes = $types . 'ii';
     $queryParameters = [...$parameters, $perPage, $offset];
@@ -425,9 +462,32 @@ $trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-ord
                       <p><?= nl2br(h($order['address'])) ?></p>
                       <?php if ($order['postal_code'] !== null): ?><strong>PIN code</strong><p><?= h($order['postal_code']) ?></p><?php endif; ?>
                       <strong>Payment</strong>
-                      <p><?= h($order['payment_method']) ?> · <?= h(ucfirst((string) $order['payment_status'])) ?></p>
+                      <p><?= h($order['payment_method']) ?> · <?= h(ucwords(str_replace('_', ' ', (string) $order['payment_status']))) ?></p>
                       <?php if ($order['gateway_order_id'] !== null): ?><strong>Gateway order</strong><p><?= h($order['gateway_order_id']) ?></p><?php endif; ?>
                       <?php if ($order['gateway_payment_id'] !== null): ?><strong>Gateway payment</strong><p><?= h($order['gateway_payment_id']) ?></p><?php endif; ?>
+                      <?php if ($order['refund_status'] !== null): ?>
+                        <strong>Refund</strong>
+                        <p>
+                          <?= h(ucfirst((string) $order['refund_status'])) ?>
+                          <?= $order['refund_id'] ? ' · ' . h($order['refund_id']) : '' ?>
+                        </p>
+                        <?php if ($order['refund_status'] === 'failed' && $order['refund_failure_reason'] !== ''): ?>
+                          <p class="refund-error"><?= h($order['refund_failure_reason']) ?></p>
+                        <?php endif; ?>
+                      <?php endif; ?>
+                      <?php if ($order['status'] === 'cancelled'
+                          && $order['payment_status'] === 'paid'
+                          && ($order['refund_status'] === null || $order['refund_status'] === 'failed')): ?>
+                        <form method="post" action="/admin/" class="refund-form"
+                              onsubmit="return confirm('Refund the full ₹<?= number_format((float) $order['total'], 0) ?> for order #<?= h($order['id']) ?>?');">
+                          <input type="hidden" name="action" value="refund_order">
+                          <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                          <input type="hidden" name="order_id" value="<?= h($order['id']) ?>">
+                          <input type="hidden" name="return_query" value="<?= h($currentQuery) ?>">
+                          <input type="hidden" name="confirm_refund" value="yes">
+                          <button type="submit">Refund full ₹<?= number_format((float) $order['total'], 0) ?></button>
+                        </form>
+                      <?php endif; ?>
                       <strong>Last updated</strong>
                       <p><?= h(date('d M Y, g:i A', strtotime((string) $order['updated_at']))) ?></p>
                       <strong>Delivery tracking</strong>

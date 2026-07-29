@@ -167,6 +167,161 @@ function updateDeliveryDetails(
     $statement->close();
 }
 
+function requestRazorpayRefund(int $orderId): array
+{
+    $keyId = getenv('F2H_RAZORPAY_KEY_ID') ?: '';
+    $keySecret = getenv('F2H_RAZORPAY_KEY_SECRET') ?: '';
+    if ($keyId === '' || $keySecret === '') {
+        throw new RuntimeException('Razorpay credentials are not configured.');
+    }
+    if (!function_exists('curl_init')) {
+        throw new RuntimeException('The PHP cURL extension is unavailable.');
+    }
+
+    $database = database();
+    $database->begin_transaction();
+    try {
+        $statement = $database->prepare(
+            'SELECT status, payment_status, gateway_payment_id, total
+             FROM orders WHERE id = ? FOR UPDATE'
+        );
+        $statement->bind_param('i', $orderId);
+        $statement->execute();
+        $order = $statement->get_result()->fetch_assoc();
+        $statement->close();
+        if (!$order) {
+            throw new DomainException('The order no longer exists.');
+        }
+        if ($order['status'] !== 'cancelled' || $order['payment_status'] !== 'paid') {
+            throw new DomainException('Only a cancelled, fully paid order can be refunded.');
+        }
+        $paymentId = (string) $order['gateway_payment_id'];
+        if (!preg_match('/^pay_[A-Za-z0-9]+$/', $paymentId)) {
+            throw new DomainException('This order does not have a valid Razorpay payment.');
+        }
+        $amountPaise = (int) round((float) $order['total'] * 100);
+        if ($amountPaise < 100) {
+            throw new DomainException('The refundable amount is invalid.');
+        }
+
+        $existingStatement = $database->prepare(
+            'SELECT status, attempt_count FROM payment_refunds WHERE order_id = ? FOR UPDATE'
+        );
+        $existingStatement->bind_param('i', $orderId);
+        $existingStatement->execute();
+        $existing = $existingStatement->get_result()->fetch_assoc();
+        $existingStatement->close();
+        if ($existing && in_array($existing['status'], ['initiating', 'pending', 'processed'], true)) {
+            throw new DomainException('A refund for this order is already in progress or completed.');
+        }
+
+        $attemptCount = $existing ? (int) $existing['attempt_count'] + 1 : 1;
+        $idempotencyKey = 'inbornfoot-refund-' . $orderId . '-' . bin2hex(random_bytes(8));
+        if ($existing) {
+            $reserve = $database->prepare(
+                "UPDATE payment_refunds
+                 SET gateway_refund_id = NULL, idempotency_key = ?, attempt_count = ?,
+                     status = 'initiating', failure_reason = ''
+                 WHERE order_id = ?"
+            );
+            $reserve->bind_param('sii', $idempotencyKey, $attemptCount, $orderId);
+        } else {
+            $reserve = $database->prepare(
+                "INSERT INTO payment_refunds
+                 (order_id, gateway_payment_id, idempotency_key, attempt_count, amount_paise, status)
+                 VALUES (?, ?, ?, ?, ?, 'initiating')"
+            );
+            $reserve->bind_param('issii', $orderId, $paymentId, $idempotencyKey, $attemptCount, $amountPaise);
+        }
+        $reserve->execute();
+        $reserve->close();
+        $database->commit();
+    } catch (Throwable $error) {
+        $database->rollback();
+        throw $error;
+    }
+
+    $payload = json_encode([
+        'amount' => $amountPaise,
+        'speed' => 'normal',
+        'receipt' => 'if-refund-' . $orderId . '-' . $attemptCount,
+        'notes' => ['order_id' => (string) $orderId],
+    ], JSON_THROW_ON_ERROR);
+    $curl = curl_init('https://api.razorpay.com/v1/payments/' . rawurlencode($paymentId) . '/refund');
+    curl_setopt_array($curl, [
+        CURLOPT_USERPWD => $keyId . ':' . $keySecret,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'X-Refund-Idempotency: ' . $idempotencyKey,
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 20,
+    ]);
+    $body = curl_exec($curl);
+    $httpStatus = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    $curlError = curl_error($curl);
+
+    try {
+        if (!is_string($body) || $httpStatus < 200 || $httpStatus >= 300) {
+            $reason = $curlError !== '' ? $curlError : "Razorpay returned HTTP {$httpStatus}.";
+            $failed = $database->prepare(
+                "UPDATE payment_refunds SET status = 'failed', failure_reason = ? WHERE order_id = ?"
+            );
+            $reason = mb_substr($reason, 0, 500);
+            $failed->bind_param('si', $reason, $orderId);
+            $failed->execute();
+            $failed->close();
+            throw new RuntimeException('Razorpay could not start the refund. You can safely retry.');
+        }
+        $refund = json_decode($body, true, 16, JSON_THROW_ON_ERROR);
+        $refundId = (string) ($refund['id'] ?? '');
+        $refundStatus = (string) ($refund['status'] ?? '');
+        if (!preg_match('/^rfnd_[A-Za-z0-9]+$/', $refundId)
+            || ($refund['payment_id'] ?? '') !== $paymentId
+            || (int) ($refund['amount'] ?? 0) !== $amountPaise
+            || !in_array($refundStatus, ['pending', 'processed'], true)
+        ) {
+            throw new RuntimeException('Razorpay returned an invalid refund response.');
+        }
+
+        $database->begin_transaction();
+        $update = $database->prepare(
+            'UPDATE payment_refunds
+             SET gateway_refund_id = ?, status = ?, failure_reason = ? WHERE order_id = ?'
+        );
+        $emptyReason = '';
+        $update->bind_param('sssi', $refundId, $refundStatus, $emptyReason, $orderId);
+        $update->execute();
+        $update->close();
+        $paymentStatus = $refundStatus === 'processed' ? 'refunded' : 'refund_pending';
+        $orderUpdate = $database->prepare('UPDATE orders SET payment_status = ? WHERE id = ?');
+        $orderUpdate->bind_param('si', $paymentStatus, $orderId);
+        $orderUpdate->execute();
+        $orderUpdate->close();
+        $database->commit();
+        return ['id' => $refundId, 'status' => $refundStatus];
+    } catch (Throwable $error) {
+        try { $database->rollback(); } catch (Throwable) {}
+        try {
+            $reason = mb_substr($error->getMessage(), 0, 500);
+            $failed = $database->prepare(
+                "UPDATE payment_refunds
+                 SET status = 'failed', failure_reason = ?
+                 WHERE order_id = ? AND status = 'initiating'"
+            );
+            $failed->bind_param('si', $reason, $orderId);
+            $failed->execute();
+            $failed->close();
+        } catch (Throwable) {
+            // Preserve the original error; a webhook can still reconcile the refund.
+        }
+        throw $error;
+    }
+}
+
 function updateOrderStatusWithInventory(int $orderId, string $newStatus): bool
 {
     $database = database();
@@ -175,7 +330,8 @@ function updateOrderStatusWithInventory(int $orderId, string $newStatus): bool
 
     try {
         $orderStatement = $database->prepare(
-            'SELECT status, order_details, inventory_deducted FROM orders WHERE id = ? FOR UPDATE'
+            'SELECT status, payment_status, order_details, inventory_deducted
+             FROM orders WHERE id = ? FOR UPDATE'
         );
         $orderStatement->bind_param('i', $orderId);
         $orderStatement->execute();
@@ -183,6 +339,11 @@ function updateOrderStatusWithInventory(int $orderId, string $newStatus): bool
         $orderStatement->close();
         if (!$order) {
             throw new DomainException('The order no longer exists.');
+        }
+        if (in_array($order['payment_status'], ['refund_pending', 'refunded'], true)
+            && $newStatus !== 'cancelled'
+        ) {
+            throw new DomainException('A refunded order must remain cancelled.');
         }
 
         $inventoryDeducted = (bool) $order['inventory_deducted'];

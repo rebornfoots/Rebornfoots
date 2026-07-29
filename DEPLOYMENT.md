@@ -59,7 +59,8 @@ https://YOUR-DOMAIN/razorpay_webhook.php
 ```
 
 Use the same secret configured as `F2H_RAZORPAY_WEBHOOK_SECRET`. Subscribe to
-`payment.captured` and `payment.failed`. Test delivery from the Razorpay dashboard
+`payment.captured`, `payment.failed`, `refund.created`, `refund.processed` and
+`refund.failed`. Test delivery from the Razorpay dashboard
 and confirm a `2xx` response.
 
 ## Production switch
