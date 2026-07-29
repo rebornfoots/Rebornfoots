@@ -335,7 +335,6 @@ $lowStockCount = count(array_filter(
           <label class="wide"><span>Image description</span><input name="alt_text" value="<?= h($form['alt_text'] ?? '') ?>" maxlength="250"></label>
           <div class="product-checks wide">
             <label><input type="checkbox" name="purchasable" value="1" <?= !empty($form['purchasable']) ? 'checked' : '' ?>><span>Available for online checkout</span></label>
-            <label><input type="checkbox" name="free_delivery" value="1" <?= !isset($form['free_delivery']) || !empty($form['free_delivery']) ? 'checked' : '' ?>><span>Free delivery</span></label>
             <label><input type="checkbox" name="track_stock" value="1" <?= !empty($form['track_stock']) ? 'checked' : '' ?>><span>Track available stock</span></label>
             <label><input type="checkbox" name="active" value="1" <?= !isset($form['active']) || !empty($form['active']) ? 'checked' : '' ?>><span>Published on storefront</span></label>
           </div>
@@ -364,7 +363,7 @@ $lowStockCount = count(array_filter(
               <p>
                 <?= h($product['variant']) ?> ·
                 <?= $product['price'] === null ? 'Contact for price' : '₹' . number_format((float) $product['price'], 0) ?>
-                · <?= $product['free_delivery'] ? 'Free delivery' : 'Delivery calculated separately' ?>
+                · Delivery set by PIN rule
                 · <?= $product['track_stock'] ? number_format((int) $product['stock_quantity']) . ' in stock' : 'Stock not tracked' ?>
               </p>
             </div>

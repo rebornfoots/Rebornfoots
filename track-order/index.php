@@ -109,7 +109,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $database = new mysqli($host, $user, $password, $name);
                 $database->set_charset('utf8mb4');
                 $statement = $database->prepare(
-                    'SELECT id, customer_name, payment_method, payment_status, order_details, total, status, postal_code,
+                    'SELECT id, customer_name, payment_method, payment_status, order_details,
+                            subtotal, delivery_fee, total, status, postal_code,
                             courier_name, tracking_number, tracking_url, estimated_delivery_date,
                             created_at, updated_at
                      FROM orders WHERE id = ? AND phone = ? LIMIT 1'
@@ -270,6 +271,8 @@ $reorderItems = $order
             <?php endforeach; ?>
           </div>
           <aside>
+            <div><span>Items subtotal</span><strong>₹<?= number_format((float) $order['subtotal'], 0) ?></strong></div>
+            <div><span>Delivery</span><strong><?= (float) $order['delivery_fee'] > 0 ? '₹' . number_format((float) $order['delivery_fee'], 0) : 'Free' ?></strong></div>
             <div><span>Order total</span><strong>₹<?= number_format((float) $order['total'], 0) ?></strong></div>
             <div><span>Payment</span><strong><?= escape($order['payment_method']) ?> · <?= escape(ucwords(str_replace('_', ' ', (string) $order['payment_status']))) ?></strong></div>
             <?php if ($order['postal_code'] !== null): ?><div><span>Delivery PIN</span><strong><?= escape($order['postal_code']) ?></strong></div><?php endif; ?>

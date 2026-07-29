@@ -17,7 +17,7 @@
   <a class="skip-link" href="#main">Skip to content</a>
 
   <header class="site-header">
-    <div class="announcement">Free delivery across South India on every order</div>
+    <div class="announcement">Fresh doorstep delivery · Charges and timing calculated by PIN code</div>
     <div class="nav-shell">
       <a class="brand" href="#" aria-label="InbornFoot home">
         <img src="logo.png" alt="" width="52" height="52">
@@ -292,7 +292,7 @@
         <article><span>🐄</span><h3>Farm sourced</h3><p>Selected from trusted local producers who share our standards.</p></article>
         <article><span>🌱</span><h3>Clean ingredients</h3><p>No artificial colours, additives or unnecessary preservatives.</p></article>
         <article><span>📦</span><h3>Careful packing</h3><p>Hygienically packed in practical sizes for lasting freshness.</p></article>
-        <article><span>🚚</span><h3>Free delivery</h3><p>Reliable doorstep delivery across supported South Indian locations.</p></article>
+        <article><span>🚚</span><h3>Clear delivery pricing</h3><p>See the exact delivery charge and estimated timing for your PIN code before payment.</p></article>
       </div>
     </section>
 
@@ -335,7 +335,7 @@
     </div>
     <div class="cart-summary" id="cartSummary" hidden>
       <div><span>Subtotal</span><strong id="cartSubtotal">₹0</strong></div>
-      <p>Free delivery. The final bill and UPI QR code will be shared after order verification.</p>
+      <p>Delivery charges and timing are calculated from your PIN code at checkout.</p>
       <button class="button button-primary full-width" id="checkoutButton" type="button">Continue to checkout</button>
     </div>
   </aside>
@@ -366,12 +366,17 @@
           <label for="customerPincode">Delivery PIN code</label>
           <input id="customerPincode" name="pincode" inputmode="numeric" autocomplete="postal-code" maxlength="6" pattern="[1-9][0-9]{5}" placeholder="6-digit PIN code" required>
           <small class="field-error"></small>
+          <small class="delivery-quote" id="deliveryQuote">Enter your PIN code to check delivery.</small>
         </div>
         <div class="payment-box">
           <span aria-hidden="true">▣</span>
           <div><strong>Secure online payment</strong><p>Pay using Razorpay Test Mode. Your order is confirmed only after secure server verification.</p></div>
         </div>
-        <div class="checkout-total"><span>Order total</span><strong id="checkoutTotal">₹0</strong></div>
+        <div class="checkout-breakdown">
+          <div><span>Items subtotal</span><strong id="checkoutSubtotal">₹0</strong></div>
+          <div><span>Delivery</span><strong id="checkoutDeliveryFee">—</strong></div>
+          <div class="checkout-total"><span>Order total</span><strong id="checkoutTotal">₹0</strong></div>
+        </div>
         <div class="form-message" id="formMessage" role="alert" hidden></div>
       </div>
       <div class="dialog-footer">

@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS orders (
     gateway_payment_id VARCHAR(100) NULL,
     payment_status ENUM('created', 'paid', 'failed', 'refund_pending', 'refunded') NOT NULL DEFAULT 'created',
     order_details JSON NOT NULL,
+    subtotal DECIMAL(10, 2) UNSIGNED NOT NULL,
+    delivery_fee DECIMAL(10, 2) UNSIGNED NOT NULL DEFAULT 0.00,
     total DECIMAL(10, 2) UNSIGNED NOT NULL,
     inventory_deducted TINYINT(1) NOT NULL DEFAULT 0,
     courier_name VARCHAR(100) NOT NULL DEFAULT '',
@@ -30,6 +32,9 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS delivery_pincodes (
     pincode CHAR(6) PRIMARY KEY,
     area_name VARCHAR(100) NOT NULL DEFAULT '',
+    delivery_fee DECIMAL(10, 2) UNSIGNED NOT NULL DEFAULT 0.00,
+    min_delivery_days TINYINT UNSIGNED NOT NULL DEFAULT 2,
+    max_delivery_days TINYINT UNSIGNED NOT NULL DEFAULT 5,
     active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

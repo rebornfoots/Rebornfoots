@@ -193,7 +193,9 @@ try {
 
     // Return the original result when a browser safely retries the same checkout.
     $existingStatement = $database->prepare(
-        'SELECT id, customer_name, phone, total, gateway_order_id FROM orders WHERE request_key = ? LIMIT 1'
+        'SELECT id, customer_name, phone, subtotal, delivery_fee, total, estimated_delivery_date,
+                gateway_order_id
+         FROM orders WHERE request_key = ? LIMIT 1'
     );
     $existingStatement->bind_param('s', $requestId);
     $existingStatement->execute();
@@ -206,7 +208,10 @@ try {
         respond(200, [
             'status' => 'success',
             'orderId' => (int) $existingOrder['id'],
+            'subtotal' => (float) $existingOrder['subtotal'],
+            'deliveryFee' => (float) $existingOrder['delivery_fee'],
             'total' => (float) $existingOrder['total'],
+            'estimatedDeliveryDate' => $existingOrder['estimated_delivery_date'],
             'duplicate' => true,
             'razorpayKeyId' => $razorpayKeyId,
             'razorpayOrderId' => (string) $existingOrder['gateway_order_id'],
@@ -215,23 +220,30 @@ try {
         ]);
     }
 
+    $deliveryFee = 0.0;
+    $minDeliveryDays = 3;
+    $maxDeliveryDays = 5;
     $zoneCount = (int) ($database->query(
         'SELECT COUNT(*) FROM delivery_pincodes WHERE active = 1'
     )->fetch_row()[0] ?? 0);
     if ($zoneCount > 0) {
         $zoneStatement = $database->prepare(
-            'SELECT pincode FROM delivery_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
+            'SELECT delivery_fee, min_delivery_days, max_delivery_days
+             FROM delivery_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
         );
         $zoneStatement->bind_param('s', $pincode);
         $zoneStatement->execute();
-        $serviceable = $zoneStatement->get_result()->fetch_assoc() !== null;
+        $zone = $zoneStatement->get_result()->fetch_assoc();
         $zoneStatement->close();
-        if (!$serviceable) {
+        if (!$zone) {
             respond(422, [
                 'status' => 'error',
                 'message' => 'Delivery is not currently available for this PIN code.',
             ]);
         }
+        $deliveryFee = (float) $zone['delivery_fee'];
+        $minDeliveryDays = (int) $zone['min_delivery_days'];
+        $maxDeliveryDays = (int) $zone['max_delivery_days'];
     }
 
     // Product identity, availability and prices always come from MySQL.
@@ -253,7 +265,7 @@ try {
     }
 
     $validatedItems = [];
-    $total = 0.0;
+    $itemsSubtotal = 0.0;
     foreach ($catalogProducts as $product) {
         $productId = (string) $product['id'];
         $quantity = $requestedItems[$productId];
@@ -273,9 +285,10 @@ try {
             'quantity' => $quantity,
             'subtotal' => $subtotal,
         ];
-        $total += $subtotal;
+        $itemsSubtotal += $subtotal;
     }
 
+    $total = $itemsSubtotal + $deliveryFee;
     $amountPaise = (int) round($total * 100);
     try {
         $gatewayOrder = createRazorpayOrder(
@@ -296,12 +309,29 @@ try {
     $database->begin_transaction();
     $transactionStarted = true;
     $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    $estimatedDeliveryDate = (new DateTimeImmutable('today'))
+        ->modify("+{$maxDeliveryDays} days")
+        ->format('Y-m-d');
     $statement = $database->prepare(
         'INSERT INTO orders (request_key, customer_name, phone, address, postal_code, payment_method,
-         gateway_order_id, order_details, total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+         gateway_order_id, order_details, subtotal, delivery_fee, total, estimated_delivery_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    $statement->bind_param('ssssssssd', $requestId, $name, $phone, $address, $pincode, $payment, $gatewayOrderId, $orderDetails, $total);
+    $statement->bind_param(
+        'ssssssssddds',
+        $requestId,
+        $name,
+        $phone,
+        $address,
+        $pincode,
+        $payment,
+        $gatewayOrderId,
+        $orderDetails,
+        $itemsSubtotal,
+        $deliveryFee,
+        $total,
+        $estimatedDeliveryDate
+    );
     $statement->execute();
     $orderId = $database->insert_id;
     $statement->close();
@@ -332,7 +362,9 @@ try {
     ) {
         try {
             $retryStatement = $database->prepare(
-                'SELECT id, customer_name, phone, total, gateway_order_id FROM orders WHERE request_key = ? LIMIT 1'
+                'SELECT id, customer_name, phone, subtotal, delivery_fee, total,
+                        estimated_delivery_date, gateway_order_id
+                 FROM orders WHERE request_key = ? LIMIT 1'
             );
             $retryStatement->bind_param('s', $requestId);
             $retryStatement->execute();
@@ -342,7 +374,10 @@ try {
                 respond(200, [
                     'status' => 'success',
                     'orderId' => (int) $retryOrder['id'],
+                    'subtotal' => (float) $retryOrder['subtotal'],
+                    'deliveryFee' => (float) $retryOrder['delivery_fee'],
                     'total' => (float) $retryOrder['total'],
+                    'estimatedDeliveryDate' => $retryOrder['estimated_delivery_date'],
                     'duplicate' => true,
                     'razorpayKeyId' => $razorpayKeyId,
                     'razorpayOrderId' => (string) $retryOrder['gateway_order_id'],
@@ -378,7 +413,10 @@ foreach ($validatedItems as $item) {
     );
 }
 $lines[] = '';
+$lines[] = 'Subtotal: ₹' . number_format($itemsSubtotal, 0);
+$lines[] = 'Delivery: ' . ($deliveryFee > 0 ? '₹' . number_format($deliveryFee, 0) : 'Free');
 $lines[] = '💰 <b>Total: ₹' . number_format($total, 0) . '</b>';
+$lines[] = "Estimated delivery: {$minDeliveryDays}-{$maxDeliveryDays} days";
 $lines[] = '💳 Payment: Razorpay checkout pending';
 
 sendTelegram(
@@ -390,7 +428,10 @@ sendTelegram(
 respond(201, [
     'status' => 'success',
     'orderId' => $orderId,
+    'subtotal' => $itemsSubtotal,
+    'deliveryFee' => $deliveryFee,
     'total' => $total,
+    'estimatedDeliveryDate' => $estimatedDeliveryDate,
     'razorpayKeyId' => $razorpayKeyId,
     'razorpayOrderId' => $gatewayOrderId,
     'amountPaise' => $amountPaise,

@@ -161,10 +161,15 @@ footer > p { grid-column: 1 / -1; margin: 0; padding-top: 25px; border-top: 1px 
 .field input, .field textarea { width: 100%; padding: 12px 14px; color: var(--ink); background: #fff; border: 1px solid #cfd8d1; border-radius: 11px; outline: none; }
 .field input:focus, .field textarea:focus { border-color: var(--leaf); box-shadow: 0 0 0 3px rgba(47,125,81,.12); }
 .field-error { display: block; min-height: 16px; color: var(--danger); }
+.delivery-quote { display: block; min-height: 18px; color: var(--muted); }
+.delivery-quote.success { color: var(--leaf); }
+.delivery-quote.error { color: var(--danger); }
 .payment-box { display: flex; gap: 13px; padding: 15px; background: #edf5ef; border-radius: 12px; }
 .payment-box > span { color: var(--forest); font-size: 25px; }
 .payment-box p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
-.checkout-total { display: flex; justify-content: space-between; padding-top: 17px; border-top: 1px solid var(--line); font-size: 18px; }
+.checkout-breakdown { display: grid; gap: 8px; }
+.checkout-breakdown > div { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; }
+.checkout-total { padding-top: 17px; color: var(--ink) !important; border-top: 1px solid var(--line); font-size: 18px !important; }
 .dialog-footer { padding-top: 0; text-align: center; }
 .dialog-footer small { display: block; margin-top: 9px; color: var(--muted); }
 .form-message { padding: 12px; color: var(--danger); background: #fff1f0; border-radius: 10px; font-size: 13px; }

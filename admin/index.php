@@ -206,8 +206,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manag
         $pincode = preg_replace('/\D/', '', (string) ($_POST['pincode'] ?? '')) ?? '';
         $mode = (string) ($_POST['mode'] ?? 'add');
         $areaName = trim((string) ($_POST['area_name'] ?? ''));
-        if (!preg_match('/^[1-9]\d{5}$/', $pincode) || mb_strlen($areaName) > 100 || !in_array($mode, ['add', 'delete'], true)) {
-            flash('error', 'Enter a valid 6-digit PIN code.');
+        $deliveryFee = filter_var($_POST['delivery_fee'] ?? null, FILTER_VALIDATE_FLOAT);
+        $minDays = filter_var($_POST['min_delivery_days'] ?? null, FILTER_VALIDATE_INT);
+        $maxDays = filter_var($_POST['max_delivery_days'] ?? null, FILTER_VALIDATE_INT);
+        $invalidRule = $mode === 'add' && (
+            $deliveryFee === false || $deliveryFee < 0 || $deliveryFee > 10000
+            || $minDays === false || $minDays < 1 || $minDays > 30
+            || $maxDays === false || $maxDays < $minDays || $maxDays > 45
+        );
+        if (!preg_match('/^[1-9]\d{5}$/', $pincode)
+            || mb_strlen($areaName) > 100
+            || !in_array($mode, ['add', 'delete'], true)
+            || $invalidRule
+        ) {
+            flash('error', 'Enter a valid PIN code, delivery fee and delivery-day range.');
         } else {
             try {
                 if ($mode === 'delete') {
@@ -218,10 +230,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manag
                     flash('success', "PIN code {$pincode} removed.");
                 } else {
                     $statement = database()->prepare(
-                        'INSERT INTO delivery_pincodes (pincode, area_name, active) VALUES (?, ?, 1)
-                         ON DUPLICATE KEY UPDATE area_name = VALUES(area_name), active = 1'
+                        'INSERT INTO delivery_pincodes
+                         (pincode, area_name, delivery_fee, min_delivery_days, max_delivery_days, active)
+                         VALUES (?, ?, ?, ?, ?, 1)
+                         ON DUPLICATE KEY UPDATE area_name = VALUES(area_name),
+                            delivery_fee = VALUES(delivery_fee),
+                            min_delivery_days = VALUES(min_delivery_days),
+                            max_delivery_days = VALUES(max_delivery_days),
+                            active = 1'
                     );
-                    $statement->bind_param('ss', $pincode, $areaName);
+                    $statement->bind_param('ssdii', $pincode, $areaName, $deliveryFee, $minDays, $maxDays);
                     $statement->execute();
                     $statement->close();
                     flash('success', "PIN code {$pincode} is now serviceable.");
@@ -251,7 +269,8 @@ $metrics = ['today_orders' => 0, 'pending_orders' => 0, 'month_sales' => 0, 'mon
 
 try {
     $deliveryZones = database()->query(
-        'SELECT pincode, area_name FROM delivery_pincodes WHERE active = 1 ORDER BY pincode'
+        'SELECT pincode, area_name, delivery_fee, min_delivery_days, max_delivery_days
+         FROM delivery_pincodes WHERE active = 1 ORDER BY pincode'
     )->fetch_all(MYSQLI_ASSOC);
     $metricsResult = database()->query(
         "SELECT
@@ -295,7 +314,8 @@ try {
     $offset = ($page - 1) * $perPage;
 
     $query = 'SELECT orders.id, customer_name, phone, address, postal_code, payment_method, payment_status,
-                     gateway_order_id, orders.gateway_payment_id, order_details, total, orders.status,
+                     gateway_order_id, orders.gateway_payment_id, order_details,
+                     subtotal, delivery_fee, total, orders.status,
                      courier_name, tracking_number, tracking_url, estimated_delivery_date,
                      orders.created_at, orders.updated_at
                      , payment_refunds.gateway_refund_id AS refund_id,
@@ -399,12 +419,18 @@ $currentQuery = http_build_query(array_filter([
         <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
         <input name="pincode" inputmode="numeric" maxlength="6" pattern="[1-9][0-9]{5}" placeholder="PIN code" required>
         <input name="area_name" maxlength="100" placeholder="Area name (optional)">
-        <button type="submit">Add coverage</button>
+        <input name="delivery_fee" type="number" min="0" max="10000" step="1" value="0" placeholder="Fee ₹" required>
+        <input name="min_delivery_days" type="number" min="1" max="30" value="2" aria-label="Minimum delivery days" required>
+        <input name="max_delivery_days" type="number" min="1" max="45" value="5" aria-label="Maximum delivery days" required>
+        <button type="submit">Save rule</button>
       </form>
       <?php if ($deliveryZones !== []): ?>
         <div class="pincode-list">
           <?php foreach ($deliveryZones as $zone): ?>
-            <span><?= h($zone['pincode']) ?><?= $zone['area_name'] !== '' ? ' · ' . h($zone['area_name']) : '' ?>
+            <span>
+              <?= h($zone['pincode']) ?><?= $zone['area_name'] !== '' ? ' · ' . h($zone['area_name']) : '' ?>
+              · <?= (float) $zone['delivery_fee'] > 0 ? '₹' . number_format((float) $zone['delivery_fee'], 0) : 'Free' ?>
+              · <?= h($zone['min_delivery_days']) ?>–<?= h($zone['max_delivery_days']) ?> days
               <form method="post" action="/admin/">
                 <input type="hidden" name="action" value="manage_pincode">
                 <input type="hidden" name="mode" value="delete">
@@ -464,6 +490,8 @@ $currentQuery = http_build_query(array_filter([
                       <?php if ($order['postal_code'] !== null): ?><strong>PIN code</strong><p><?= h($order['postal_code']) ?></p><?php endif; ?>
                       <strong>Payment</strong>
                       <p><?= h($order['payment_method']) ?> · <?= h(ucwords(str_replace('_', ' ', (string) $order['payment_status']))) ?></p>
+                      <strong>Delivery charge</strong>
+                      <p><?= (float) $order['delivery_fee'] > 0 ? '₹' . number_format((float) $order['delivery_fee'], 0) : 'Free' ?></p>
                       <?php if ($order['gateway_order_id'] !== null): ?><strong>Gateway order</strong><p><?= h($order['gateway_order_id']) ?></p><?php endif; ?>
                       <?php if ($order['gateway_payment_id'] !== null): ?><strong>Gateway payment</strong><p><?= h($order['gateway_payment_id']) ?></p><?php endif; ?>
                       <?php if ($order['refund_status'] !== null): ?>

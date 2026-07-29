@@ -12,6 +12,9 @@ const STORAGE_KEY = "inbornfoot_cart_v2";
 let cart = loadCart();
 let checkoutRequestId = null;
 let toastTimer;
+let deliveryQuoteState = null;
+let deliveryQuoteTimer;
+let deliveryQuoteSequence = 0;
 
 const elements = {
   cartTrigger: document.querySelector("#cartTrigger"),
@@ -28,6 +31,10 @@ const elements = {
   checkoutDialog: document.querySelector("#checkoutDialog"),
   closeCheckout: document.querySelector("#closeCheckout"),
   checkoutForm: document.querySelector("#checkoutForm"),
+  customerPincode: document.querySelector("#customerPincode"),
+  deliveryQuote: document.querySelector("#deliveryQuote"),
+  checkoutSubtotal: document.querySelector("#checkoutSubtotal"),
+  checkoutDeliveryFee: document.querySelector("#checkoutDeliveryFee"),
   checkoutTotal: document.querySelector("#checkoutTotal"),
   placeOrderButton: document.querySelector("#placeOrderButton"),
   formMessage: document.querySelector("#formMessage"),
@@ -71,6 +78,61 @@ function cartTotal() {
   return cartEntries().reduce((total, [id, quantity]) =>
     total + PRODUCTS[id].price * quantity, 0
   );
+}
+
+function renderCheckoutTotal() {
+  const subtotal = cartTotal();
+  const fee = deliveryQuoteState?.serviceable ? deliveryQuoteState.deliveryFee : 0;
+  elements.checkoutSubtotal.textContent = money(subtotal);
+  elements.checkoutDeliveryFee.textContent = deliveryQuoteState?.serviceable
+    ? (fee > 0 ? money(fee) : "Free")
+    : "—";
+  elements.checkoutTotal.textContent = money(subtotal + fee);
+}
+
+function resetDeliveryQuote(message = "Enter your PIN code to check delivery.") {
+  deliveryQuoteState = null;
+  elements.deliveryQuote.textContent = message;
+  elements.deliveryQuote.className = "delivery-quote";
+  renderCheckoutTotal();
+}
+
+async function loadDeliveryQuote(pincode) {
+  const sequence = ++deliveryQuoteSequence;
+  elements.deliveryQuote.textContent = "Checking delivery…";
+  elements.deliveryQuote.className = "delivery-quote";
+  try {
+    const response = await fetch(`delivery_quote.php?pincode=${encodeURIComponent(pincode)}`, {
+      headers: { "Accept": "application/json" }
+    });
+    const result = await response.json().catch(() => ({}));
+    if (sequence !== deliveryQuoteSequence) return null;
+    if (!response.ok || result.status !== "success" || !result.serviceable) {
+      throw new Error(result.message || "Delivery is unavailable for this PIN code.");
+    }
+    deliveryQuoteState = {
+      pincode,
+      serviceable: true,
+      deliveryFee: Number(result.deliveryFee) || 0,
+      minDays: Number(result.minDays),
+      maxDays: Number(result.maxDays),
+      areaName: result.areaName || ""
+    };
+    const area = deliveryQuoteState.areaName ? `${deliveryQuoteState.areaName} · ` : "";
+    const fee = deliveryQuoteState.deliveryFee > 0 ? money(deliveryQuoteState.deliveryFee) : "Free delivery";
+    elements.deliveryQuote.textContent =
+      `${area}${fee} · Estimated ${deliveryQuoteState.minDays}–${deliveryQuoteState.maxDays} days`;
+    elements.deliveryQuote.className = "delivery-quote success";
+    renderCheckoutTotal();
+    return deliveryQuoteState;
+  } catch (error) {
+    if (sequence !== deliveryQuoteSequence) return null;
+    deliveryQuoteState = null;
+    elements.deliveryQuote.textContent = error.message;
+    elements.deliveryQuote.className = "delivery-quote error";
+    renderCheckoutTotal();
+    throw error;
+  }
 }
 
 function cartQuantity() {
@@ -123,7 +185,7 @@ function renderCart() {
   elements.emptyCart.hidden = !empty;
   elements.cartSummary.hidden = empty;
   elements.cartSubtotal.textContent = money(cartTotal());
-  elements.checkoutTotal.textContent = money(cartTotal());
+  renderCheckoutTotal();
 }
 
 function openCart() {
@@ -146,7 +208,7 @@ function closeCart() {
 function openCheckout() {
   if (!cartQuantity()) return;
   closeCart();
-  elements.checkoutTotal.textContent = money(cartTotal());
+  renderCheckoutTotal();
   elements.checkoutDialog.showModal();
   document.querySelector("#customerName").focus();
 }
@@ -234,12 +296,10 @@ function productCard(product) {
   const price = document.createElement("strong");
   const variant = document.createElement("small");
   variant.textContent = product.variant;
-  if (product.freeDelivery) {
-    const delivery = document.createElement("small");
-    delivery.className = "delivery-note";
-    delivery.textContent = "Free delivery";
-    pricing.append(price, variant, delivery);
-  }
+  const delivery = document.createElement("small");
+  delivery.className = "delivery-note";
+  delivery.textContent = "Delivery calculated by PIN code";
+  pricing.append(price, variant, delivery);
 
   if (product.inStock === false && product.price !== null) {
     price.textContent = money(product.price);
@@ -312,13 +372,23 @@ async function submitOrder(event) {
   if (!elements.checkoutForm.reportValidity() || !cartQuantity()) return;
 
   const formData = new FormData(elements.checkoutForm);
+  const pincode = formData.get("pincode").trim();
+  if (!deliveryQuoteState || deliveryQuoteState.pincode !== pincode) {
+    clearTimeout(deliveryQuoteTimer);
+    try {
+      const quote = await loadDeliveryQuote(pincode);
+      if (!quote) return;
+    } catch {
+      return;
+    }
+  }
   checkoutRequestId ||= crypto.randomUUID();
   const payload = {
     requestId: checkoutRequestId,
     name: formData.get("name").trim(),
     phone: formData.get("phone").trim(),
     address: formData.get("address").trim(),
-    pincode: formData.get("pincode").trim(),
+    pincode,
     payment: "Razorpay",
     items: Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }))
   };
@@ -337,6 +407,12 @@ async function submitOrder(event) {
     if (!response.ok || result.status !== "success") {
       throw new Error(result.message || "We couldn’t place your order. Please try again.");
     }
+    deliveryQuoteState = {
+      pincode,
+      serviceable: true,
+      deliveryFee: Number(result.deliveryFee) || 0
+    };
+    renderCheckoutTotal();
 
     if (typeof window.Razorpay !== "function") {
       throw new Error("Secure payment checkout could not load. Check your connection and try again.");
@@ -390,6 +466,7 @@ async function submitOrder(event) {
     cart = {};
     saveCart();
     elements.checkoutForm.reset();
+    resetDeliveryQuote();
     closeCheckout();
     elements.successOrderId.textContent = result.orderId;
     elements.orderSuccessDialog.showModal();
@@ -428,6 +505,21 @@ elements.checkoutButton.addEventListener("click", openCheckout);
 elements.closeCheckout.addEventListener("click", closeCheckout);
 elements.closeOrderSuccess.addEventListener("click", () => elements.orderSuccessDialog.close());
 elements.checkoutForm.addEventListener("submit", submitOrder);
+elements.customerPincode.addEventListener("input", () => {
+  checkoutRequestId = null;
+  clearTimeout(deliveryQuoteTimer);
+  const pincode = elements.customerPincode.value.replace(/\D/g, "").slice(0, 6);
+  elements.customerPincode.value = pincode;
+  if (pincode.length !== 6) {
+    ++deliveryQuoteSequence;
+    resetDeliveryQuote();
+    return;
+  }
+  resetDeliveryQuote("Checking delivery…");
+  deliveryQuoteTimer = setTimeout(() => {
+    loadDeliveryQuote(pincode).catch(() => {});
+  }, 300);
+});
 elements.checkoutDialog.addEventListener("click", event => {
   if (event.target === elements.checkoutDialog) closeCheckout();
 });
