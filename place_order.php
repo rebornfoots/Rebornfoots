@@ -8,35 +8,6 @@ header('Cache-Control: no-store');
 const MAX_REQUEST_BYTES = 16384;
 const MAX_ITEM_QUANTITY = 20;
 
-// Prices live only on the server. Never trust names or prices sent by a browser.
-const PRODUCTS = [
-    'karupatti-500' => [
-        'name' => 'Pure Palm Jaggery',
-        'variant' => '500 g',
-        'price' => 420.00,
-    ],
-    'cow-butter-1kg' => [
-        'name' => 'Pure Cow Butter',
-        'variant' => '1 kg (2 x 500 g)',
-        'price' => 820.00,
-    ],
-    'buffalo-butter-1kg' => [
-        'name' => 'Fresh White Butter',
-        'variant' => '1 kg (2 x 500 g)',
-        'price' => 840.00,
-    ],
-    'cow-ghee-1l' => [
-        'name' => 'Traditional Cow Ghee',
-        'variant' => '1 litre (2 x 500 ml)',
-        'price' => 1020.00,
-    ],
-    'buffalo-ghee-1l' => [
-        'name' => 'Village-Style Ghee',
-        'variant' => '1 litre (2 x 500 ml)',
-        'price' => 1050.00,
-    ],
-];
-
 function respond(int $statusCode, array $payload): never
 {
     http_response_code($statusCode);
@@ -133,15 +104,14 @@ if (mb_strlen($address) < 10 || mb_strlen($address) > 500) {
 if ($payment !== 'UPI') {
     $errors[] = 'Select a supported payment method.';
 }
-if (!is_array($items) || count($items) < 1 || count($items) > count(PRODUCTS)) {
+if (!is_array($items) || count($items) < 1 || count($items) > 50) {
     $errors[] = 'Your cart is empty or invalid.';
 }
 if ($errors !== []) {
     respond(422, ['status' => 'error', 'message' => implode(' ', $errors)]);
 }
 
-$validatedItems = [];
-$total = 0.0;
+$requestedItems = [];
 foreach ($items as $item) {
     if (!is_array($item)) {
         respond(422, ['status' => 'error', 'message' => 'Your cart contains an invalid item.']);
@@ -149,23 +119,17 @@ foreach ($items as $item) {
 
     $productId = (string) ($item['productId'] ?? '');
     $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_INT);
-    if (!isset(PRODUCTS[$productId]) || $quantity === false || $quantity < 1 || $quantity > MAX_ITEM_QUANTITY) {
+    if (!preg_match('/^[a-z0-9-]{2,64}$/', $productId)
+        || $quantity === false
+        || $quantity < 1
+        || $quantity > MAX_ITEM_QUANTITY
+    ) {
         respond(422, ['status' => 'error', 'message' => 'Your cart contains an unavailable item or quantity.']);
     }
-    if (isset($validatedItems[$productId])) {
+    if (isset($requestedItems[$productId])) {
         respond(422, ['status' => 'error', 'message' => 'Your cart contains duplicate items.']);
     }
-
-    $product = PRODUCTS[$productId];
-    $subtotal = $product['price'] * $quantity;
-    $validatedItems[$productId] = [
-        'name' => $product['name'],
-        'variant' => $product['variant'],
-        'price' => $product['price'],
-        'quantity' => $quantity,
-        'subtotal' => $subtotal,
-    ];
-    $total += $subtotal;
+    $requestedItems[$productId] = $quantity;
 }
 
 $dbHost = getenv('F2H_DB_HOST') ?: '';
@@ -182,6 +146,42 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 try {
     $database = new mysqli($dbHost, $dbUser, $dbPassword, $dbName);
     $database->set_charset('utf8mb4');
+
+    // Product identity, availability and prices always come from MySQL.
+    $productIds = array_keys($requestedItems);
+    $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+    $catalogStatement = $database->prepare(
+        "SELECT id, name, variant, price
+         FROM products
+         WHERE id IN ({$placeholders}) AND active = 1 AND purchasable = 1 AND price IS NOT NULL"
+    );
+    $catalogTypes = str_repeat('s', count($productIds));
+    $catalogStatement->bind_param($catalogTypes, ...$productIds);
+    $catalogStatement->execute();
+    $catalogProducts = $catalogStatement->get_result()->fetch_all(MYSQLI_ASSOC);
+    $catalogStatement->close();
+
+    if (count($catalogProducts) !== count($requestedItems)) {
+        respond(422, ['status' => 'error', 'message' => 'A product in your cart is no longer available. Refresh and try again.']);
+    }
+
+    $validatedItems = [];
+    $total = 0.0;
+    foreach ($catalogProducts as $product) {
+        $productId = (string) $product['id'];
+        $quantity = $requestedItems[$productId];
+        $price = (float) $product['price'];
+        $subtotal = $price * $quantity;
+        $validatedItems[$productId] = [
+            'productId' => $productId,
+            'name' => (string) $product['name'],
+            'variant' => (string) $product['variant'],
+            'price' => $price,
+            'quantity' => $quantity,
+            'subtotal' => $subtotal,
+        ];
+        $total += $subtotal;
+    }
 
     $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     $statement = $database->prepare(

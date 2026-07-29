@@ -1,6 +1,6 @@
 "use strict";
 
-const PRODUCTS = {
+let PRODUCTS = {
   "karupatti-500": { name: "Pure Palm Jaggery", variant: "500 g", price: 420 },
   "cow-butter-1kg": { name: "Pure Cow Butter", variant: "1 kg · 2 × 500 g", price: 820 },
   "buffalo-butter-1kg": { name: "Fresh White Butter", variant: "1 kg · 2 × 500 g", price: 840 },
@@ -154,6 +154,128 @@ function showToast(message) {
   toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2600);
 }
 
+function safeImageUrl(value) {
+  try {
+    const url = new URL(value, window.location.href);
+    if (url.origin === window.location.origin || url.hostname === "images.unsplash.com") {
+      return url.href;
+    }
+  } catch {
+    // Invalid catalogue image URLs use the neutral card background.
+  }
+  return "";
+}
+
+function productCard(product) {
+  const card = document.createElement("article");
+  card.className = "product-card";
+  if (product.purchasable && product.price !== null) {
+    card.dataset.productId = product.id;
+  }
+
+  const image = document.createElement("div");
+  image.className = "product-image";
+  image.setAttribute("role", "img");
+  image.setAttribute("aria-label", product.altText || product.name);
+  const imageUrl = safeImageUrl(product.imageUrl);
+  if (imageUrl) image.style.backgroundImage = `url("${imageUrl}")`;
+
+  if (product.badge) {
+    const badge = document.createElement("span");
+    badge.className = "product-badge";
+    badge.textContent = product.badge;
+    image.append(badge);
+  }
+
+  const content = document.createElement("div");
+  content.className = "product-content";
+  const meta = document.createElement("div");
+  meta.className = "product-meta";
+  const category = document.createElement("span");
+  category.textContent = product.category;
+  const quality = document.createElement("span");
+  quality.textContent = product.purchasable ? "★★★★★" : "Natural";
+  meta.append(category, quality);
+
+  const title = document.createElement("h3");
+  title.textContent = product.name;
+  const description = document.createElement("p");
+  description.textContent = product.description;
+  content.append(meta, title, description);
+
+  if (Array.isArray(product.benefits) && product.benefits.length) {
+    const benefits = document.createElement("ul");
+    benefits.className = "product-benefits";
+    product.benefits.slice(0, 5).forEach(value => {
+      const item = document.createElement("li");
+      item.textContent = value;
+      benefits.append(item);
+    });
+    content.append(benefits);
+  }
+
+  const buy = document.createElement("div");
+  buy.className = "product-buy";
+  const pricing = document.createElement("div");
+  const price = document.createElement("strong");
+  const variant = document.createElement("small");
+  variant.textContent = product.variant;
+
+  if (product.purchasable && product.price !== null) {
+    price.textContent = money(product.price);
+    const button = document.createElement("button");
+    button.className = "add-button";
+    button.type = "button";
+    button.textContent = "Add to cart";
+    button.addEventListener("click", () => addToCart(product.id));
+    pricing.append(price, variant);
+    buy.append(pricing, button);
+  } else {
+    price.className = "contact-price";
+    price.textContent = "Contact for price";
+    const link = document.createElement("a");
+    link.className = "add-button contact-button";
+    link.href = "tel:+918110007172";
+    link.textContent = "Call to order";
+    pricing.append(price, variant);
+    buy.append(pricing, link);
+  }
+
+  content.append(buy);
+  card.append(image, content);
+  return card;
+}
+
+async function loadProducts() {
+  try {
+    const response = await fetch("products.php", { headers: { "Accept": "application/json" } });
+    const result = await response.json();
+    if (!response.ok || result.status !== "success" || !Array.isArray(result.products) || !result.products.length) {
+      throw new Error("Catalogue unavailable");
+    }
+
+    const nextProducts = {};
+    result.products.forEach(product => {
+      if (product.purchasable && Number.isFinite(product.price)) {
+        nextProducts[product.id] = {
+          name: product.name,
+          variant: product.variant,
+          price: product.price
+        };
+      }
+    });
+    PRODUCTS = nextProducts;
+    cart = Object.fromEntries(Object.entries(cart).filter(([id]) => PRODUCTS[id]));
+
+    const grid = document.querySelector(".product-grid");
+    const cards = result.products.map(productCard);
+    grid.replaceChildren(...cards);
+    saveCart();
+  } catch {
+    // The server-rendered catalogue remains usable if the API or DB is unavailable.
+  }
+}
+
 async function submitOrder(event) {
   event.preventDefault();
   elements.formMessage.hidden = true;
@@ -230,3 +352,4 @@ document.addEventListener("keydown", event => {
 
 document.querySelector("#currentYear").textContent = new Date().getFullYear();
 renderCart();
+loadProducts();

@@ -225,6 +225,7 @@ $currentQuery = http_build_query(array_filter([
       <span><strong>InbornFoot</strong><small>Admin</small></span>
     </a>
     <div class="admin-actions">
+      <a href="/admin/products.php">Products</a>
       <a href="/" target="_blank" rel="noopener">View store ↗</a>
       <form method="post" action="/admin/logout.php">
         <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">

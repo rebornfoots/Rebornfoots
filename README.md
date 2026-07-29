@@ -42,6 +42,7 @@ server environment variables rather than parsing an exposed web-root `.env` file
 The protected dashboard is available at `/admin/` and includes:
 
 - Orders and revenue overview
+- Database-backed product, price and availability management
 - Search by order number, customer name, or phone
 - Status filtering and paginated order results
 - Order delivery and item details
@@ -62,6 +63,16 @@ In production, `/admin/` must only be used over HTTPS.
 For a database created with an older version of this project, run
 `database/migrate_legacy_orders_for_admin.sql` once before opening the dashboard.
 Fresh installations using `database/schema.sql` do not need the migration.
+
+Run `database/migrate_products.sql` once to add and seed the product catalogue on
+an existing database. The migration is idempotent, but its seed values overwrite
+matching product fields, so use the admin dashboard for later catalogue changes.
+
+Products are managed at `/admin/products.php`. The public `products.php` endpoint
+returns only active products and is cached briefly for performance. The storefront
+keeps its built-in HTML catalogue as a resilient fallback if the API is unavailable.
+Checkout never trusts browser prices: it reloads current price, availability and
+purchase eligibility from MySQL before creating every order.
 
 ## Order security
 

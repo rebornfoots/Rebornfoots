@@ -13,3 +13,23 @@ CREATE TABLE IF NOT EXISTS orders (
     INDEX idx_orders_phone (phone),
     INDEX idx_orders_status_created (status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS products (
+    id VARCHAR(64) PRIMARY KEY,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    category VARCHAR(80) NOT NULL,
+    description VARCHAR(500) NOT NULL,
+    price DECIMAL(10, 2) UNSIGNED NULL,
+    variant VARCHAR(100) NOT NULL DEFAULT '',
+    badge VARCHAR(60) NOT NULL DEFAULT '',
+    benefits JSON NULL,
+    image_url VARCHAR(500) NOT NULL DEFAULT '',
+    alt_text VARCHAR(250) NOT NULL DEFAULT '',
+    purchasable TINYINT(1) NOT NULL DEFAULT 0,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_products_active_sort (active, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
