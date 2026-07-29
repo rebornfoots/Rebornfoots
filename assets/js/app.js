@@ -30,6 +30,9 @@ const elements = {
   checkoutTotal: document.querySelector("#checkoutTotal"),
   placeOrderButton: document.querySelector("#placeOrderButton"),
   formMessage: document.querySelector("#formMessage"),
+  orderSuccessDialog: document.querySelector("#orderSuccessDialog"),
+  successOrderId: document.querySelector("#successOrderId"),
+  closeOrderSuccess: document.querySelector("#closeOrderSuccess"),
   toast: document.querySelector("#toast")
 };
 
@@ -325,7 +328,8 @@ async function submitOrder(event) {
     saveCart();
     elements.checkoutForm.reset();
     closeCheckout();
-    showToast(`Order #${result.orderId} placed successfully`);
+    elements.successOrderId.textContent = result.orderId;
+    elements.orderSuccessDialog.showModal();
   } catch (error) {
     elements.formMessage.textContent = error.message;
     elements.formMessage.hidden = false;
@@ -357,6 +361,7 @@ elements.drawerBackdrop.addEventListener("click", closeCart);
 elements.continueShopping.addEventListener("click", closeCart);
 elements.checkoutButton.addEventListener("click", openCheckout);
 elements.closeCheckout.addEventListener("click", closeCheckout);
+elements.closeOrderSuccess.addEventListener("click", () => elements.orderSuccessDialog.close());
 elements.checkoutForm.addEventListener("submit", submitOrder);
 elements.checkoutDialog.addEventListener("click", event => {
   if (event.target === elements.checkoutDialog) closeCheckout();

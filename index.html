@@ -375,6 +375,24 @@
     </form>
   </dialog>
 
+  <dialog class="checkout-dialog success-dialog" id="orderSuccessDialog">
+    <div class="success-content">
+      <div class="success-mark" aria-hidden="true">✓</div>
+      <p class="eyebrow">Order received</p>
+      <h2>Thank you for choosing InbornFoot.</h2>
+      <p>We’ll verify your order and contact you with the final bill and UPI payment details.</p>
+      <div class="success-order-number">
+        <span>Your order number</span>
+        <strong>#<span id="successOrderId"></span></strong>
+      </div>
+      <p class="success-reminder">Save this number. You’ll need it with your mobile number to track the order.</p>
+      <div class="success-actions">
+        <a class="button button-primary full-width" href="/track-order/">Track your order</a>
+        <button class="button success-close full-width" id="closeOrderSuccess" type="button">Continue shopping</button>
+      </div>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

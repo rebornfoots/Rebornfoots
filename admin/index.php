@@ -207,6 +207,8 @@ $currentQuery = http_build_query(array_filter([
     'status' => $status,
     'page' => $page > 1 ? $page : null,
 ], static fn ($value) => $value !== '' && $value !== null));
+$safeHost = preg_replace('/[^a-zA-Z0-9.:\-\[\]]/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'your-domain.com'));
+$trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-order/';
 ?>
 <!doctype html>
 <html lang="en">
@@ -303,6 +305,11 @@ $currentQuery = http_build_query(array_filter([
                 <td data-label="Customer">
                   <strong><?= h($order['customer_name']) ?></strong>
                   <a href="tel:+91<?= h($order['phone']) ?>"><?= h($order['phone']) ?></a>
+                  <a class="whatsapp-link" href="https://wa.me/91<?= h($order['phone']) ?>?text=<?= rawurlencode(
+                      'Hello ' . $order['customer_name'] . ', your InbornFoot order #' . $order['id']
+                      . ' is now ' . statusLabel((string) $order['status'])
+                      . '. Track it at ' . $trackingBaseUrl
+                  ) ?>" target="_blank" rel="noopener">WhatsApp update ↗</a>
                 </td>
                 <td data-label="Items">
                   <ul class="order-items">

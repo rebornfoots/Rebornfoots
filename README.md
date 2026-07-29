@@ -97,6 +97,12 @@ Tracking lookups use prepared queries, CSRF protection, generic failure messages
 session-based throttling, private no-store responses and search-engine blocking.
 Cancelled orders display the support phone number instead of an active timeline.
 
+After checkout, customers receive a clear on-screen receipt containing their order
+number and a direct link to the tracking page. The admin orders table includes a
+one-click WhatsApp action with a prefilled status update. This opens WhatsApp for
+manual review and sending; it does not send messages automatically or require API
+credentials.
+
 ## Order security
 
 - The browser submits only product IDs and quantities.
