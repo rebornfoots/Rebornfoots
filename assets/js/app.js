@@ -55,6 +55,10 @@ function saveCart() {
   renderCart();
 }
 
+function cartEntries() {
+  return Object.entries(cart).filter(([id]) => PRODUCTS[id]);
+}
+
 function money(value) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -64,13 +68,13 @@ function money(value) {
 }
 
 function cartTotal() {
-  return Object.entries(cart).reduce((total, [id, quantity]) =>
+  return cartEntries().reduce((total, [id, quantity]) =>
     total + PRODUCTS[id].price * quantity, 0
   );
 }
 
 function cartQuantity() {
-  return Object.values(cart).reduce((total, quantity) => total + quantity, 0);
+  return cartEntries().reduce((total, [, quantity]) => total + quantity, 0);
 }
 
 function addToCart(id) {
@@ -95,7 +99,7 @@ function renderCart() {
   elements.cartCount.setAttribute("aria-label", `${quantity} item${quantity === 1 ? "" : "s"}`);
   elements.cartItems.replaceChildren();
 
-  Object.entries(cart).forEach(([id, quantity]) => {
+  cartEntries().forEach(([id, quantity]) => {
     const product = PRODUCTS[id];
     const item = document.createElement("article");
     item.className = "cart-item";
