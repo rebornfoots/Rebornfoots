@@ -1,0 +1,88 @@
+<?php
+declare(strict_types=1);
+
+require __DIR__ . '/bootstrap.php';
+requireAdmin();
+
+if (!validCsrf($_GET['token'] ?? null)) {
+    http_response_code(403);
+    exit('Invalid export request.');
+}
+
+$search = trim((string) ($_GET['q'] ?? ''));
+$status = (string) ($_GET['status'] ?? '');
+$status = in_array($status, ADMIN_STATUSES, true) ? $status : '';
+$conditions = [];
+$types = '';
+$parameters = [];
+
+if ($status !== '') {
+    $conditions[] = 'status = ?';
+    $types .= 's';
+    $parameters[] = $status;
+}
+if ($search !== '') {
+    $conditions[] = '(CAST(id AS CHAR) = ? OR customer_name LIKE ? OR phone LIKE ?)';
+    $types .= 'sss';
+    $parameters[] = ltrim($search, '#');
+    $likeSearch = '%' . $search . '%';
+    $parameters[] = $likeSearch;
+    $parameters[] = $likeSearch;
+}
+$where = $conditions === [] ? '' : ' WHERE ' . implode(' AND ', $conditions);
+
+function csvSafe(mixed $value): string
+{
+    $text = (string) $value;
+    return preg_match('/^[=+\-@]/', $text) ? "'" . $text : $text;
+}
+
+try {
+    $statement = database()->prepare(
+        'SELECT id, customer_name, phone, address, payment_method, order_details, total, status, created_at, updated_at
+         FROM orders' . $where . ' ORDER BY created_at DESC, id DESC LIMIT 10000'
+    );
+    if ($types !== '') {
+        $statement->bind_param($types, ...$parameters);
+    }
+    $statement->execute();
+    $result = $statement->get_result();
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="inbornfoot-orders-' . date('Y-m-d-His') . '.csv"');
+    echo "\xEF\xBB\xBF";
+    $output = fopen('php://output', 'wb');
+    fputcsv($output, ['Order ID', 'Customer', 'Phone', 'Address', 'Payment', 'Items', 'Total', 'Status', 'Created', 'Updated']);
+
+    while ($order = $result->fetch_assoc()) {
+        $itemDescriptions = [];
+        foreach (normalizedOrderItems((string) $order['order_details']) as $item) {
+            $description = (string) ($item['name'] ?? 'Item');
+            if (!empty($item['variant'])) {
+                $description .= ' (' . $item['variant'] . ')';
+            }
+            if (($item['quantity'] ?? '') !== '') {
+                $description .= ' x ' . $item['quantity'];
+            }
+            $itemDescriptions[] = $description;
+        }
+        fputcsv($output, array_map('csvSafe', [
+            $order['id'],
+            $order['customer_name'],
+            $order['phone'],
+            $order['address'],
+            $order['payment_method'],
+            implode('; ', $itemDescriptions),
+            $order['total'],
+            $order['status'],
+            $order['created_at'],
+            $order['updated_at'],
+        ]));
+    }
+    fclose($output);
+    $statement->close();
+} catch (Throwable $error) {
+    error_log('InbornFoot CSV export error: ' . $error->getMessage());
+    http_response_code(500);
+    exit('The export could not be generated.');
+}

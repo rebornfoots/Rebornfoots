@@ -23,6 +23,8 @@ through Telegram.
    - `F2H_DB_PASSWORD`
    - `F2H_TELEGRAM_BOT_TOKEN` (optional)
    - `F2H_TELEGRAM_CHAT_ID` (optional)
+   - `F2H_ADMIN_USERNAME`
+   - `F2H_ADMIN_PASSWORD_HASH`
 
 3. Serve this directory through a PHP-capable web server. For PHP's local server:
 
@@ -34,6 +36,32 @@ through Telegram.
 
 `.env.example` documents the variables, but `place_order.php` intentionally reads
 server environment variables rather than parsing an exposed web-root `.env` file.
+
+## Admin dashboard
+
+The protected dashboard is available at `/admin/` and includes:
+
+- Orders and revenue overview
+- Search by order number, customer name, or phone
+- Status filtering and paginated order results
+- Order delivery and item details
+- Status updates protected by CSRF tokens
+- Filtered CSV export
+- Automatic logout after 30 minutes of inactivity
+
+Generate a secure password hash without placing the plain password in source code:
+
+```sh
+php -r "echo password_hash('your-long-unique-password', PASSWORD_DEFAULT), PHP_EOL;"
+```
+
+Set the resulting value as `F2H_ADMIN_PASSWORD_HASH` and set the desired login
+name as `F2H_ADMIN_USERNAME`. The login screen remains disabled until both exist.
+In production, `/admin/` must only be used over HTTPS.
+
+For a database created with an older version of this project, run
+`database/migrate_legacy_orders_for_admin.sql` once before opening the dashboard.
+Fresh installations using `database/schema.sql` do not need the migration.
 
 ## Order security
 
