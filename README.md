@@ -87,6 +87,10 @@ Stock tracking is off by default. Enable it only after entering a verified avail
 quantity. Different pack sizes should be created as separate product records with
 unique IDs so each variant has an independent price and stock count.
 
+Run `database/migrate_product_delivery_and_catalog_data.sql` once after the inventory
+migration to apply the current six-product prices, pack sizes, stock levels, warning
+thresholds and free-delivery settings.
+
 ## Customer order tracking
 
 Customers can track an order at `/track-order/` using the order number and the

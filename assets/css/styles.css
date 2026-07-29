@@ -93,6 +93,7 @@ nav a:hover { color: var(--leaf); }
 .product-buy { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding-top: 17px; border-top: 1px solid var(--line); }
 .product-buy strong { display: block; color: var(--forest); font-size: 22px; }
 .product-buy small { color: var(--muted); }
+.product-buy .delivery-note { color: var(--leaf); font-size: 10px; font-weight: 750; }
 .add-button { padding: 10px 15px; color: var(--forest); background: #edf5ef; border: 0; border-radius: 12px; cursor: pointer; font-weight: 800; }
 .add-button:hover { color: #fff; background: var(--forest); }
 .add-button:disabled { color: var(--muted); background: #e8ebe8; cursor: not-allowed; }

@@ -105,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $imageUrl = trim((string) ($_POST['image_url'] ?? ''));
         $altText = productText($_POST['alt_text'] ?? '', 250);
         $purchasable = isset($_POST['purchasable']) ? 1 : 0;
+        $freeDelivery = isset($_POST['free_delivery']) ? 1 : 0;
         $trackStock = isset($_POST['track_stock']) ? 1 : 0;
         $stockQuantity = max(0, min(4294967295, (int) ($_POST['stock_quantity'] ?? 0)));
         $lowStockThreshold = max(0, min(65535, (int) ($_POST['low_stock_threshold'] ?? 5)));
@@ -165,27 +166,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statement = database()->prepare(
                     'INSERT INTO products
                      (id, slug, name, category, description, price, variant, badge, benefits, image_url,
-                      alt_text, purchasable, track_stock, stock_quantity, low_stock_threshold, active, sort_order)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                      alt_text, purchasable, free_delivery, track_stock, stock_quantity,
+                      low_stock_threshold, active, sort_order)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
                 );
                 $statement->bind_param(
-                    'sssssdsssssiiiiii',
+                    'sssssdsssssiiiiiii',
                     $id, $slug, $name, $category, $description, $price, $variant, $badge,
-                    $benefits, $imageUrl, $altText, $purchasable, $trackStock, $stockQuantity,
-                    $lowStockThreshold, $active, $sortOrder
+                    $benefits, $imageUrl, $altText, $purchasable, $freeDelivery, $trackStock,
+                    $stockQuantity, $lowStockThreshold, $active, $sortOrder
                 );
             } else {
                 $statement = database()->prepare(
                     'UPDATE products SET slug = ?, name = ?, category = ?, description = ?, price = ?,
                      variant = ?, badge = ?, benefits = ?, image_url = ?, alt_text = ?,
-                     purchasable = ?, track_stock = ?, stock_quantity = ?, low_stock_threshold = ?,
-                     active = ?, sort_order = ? WHERE id = ?'
+                     purchasable = ?, free_delivery = ?, track_stock = ?, stock_quantity = ?,
+                     low_stock_threshold = ?, active = ?, sort_order = ? WHERE id = ?'
                 );
                 $statement->bind_param(
-                    'ssssdsssssiiiiiis',
+                    'ssssdsssssiiiiiiis',
                     $slug, $name, $category, $description, $price, $variant, $badge, $benefits,
-                    $imageUrl, $altText, $purchasable, $trackStock, $stockQuantity,
-                    $lowStockThreshold, $active, $sortOrder, $id
+                    $imageUrl, $altText, $purchasable, $freeDelivery, $trackStock,
+                    $stockQuantity, $lowStockThreshold, $active, $sortOrder, $id
                 );
             }
             $statement->execute();
@@ -208,7 +210,7 @@ $products = [];
 try {
     $products = database()->query(
         'SELECT id, slug, name, category, description, price, variant, badge, benefits,
-                image_url, alt_text, purchasable, track_stock, stock_quantity, low_stock_threshold,
+                image_url, alt_text, purchasable, free_delivery, track_stock, stock_quantity, low_stock_threshold,
                 active, sort_order, updated_at
          FROM products ORDER BY sort_order, name'
     )->fetch_all(MYSQLI_ASSOC);
@@ -240,6 +242,7 @@ $form = $_SESSION['product_form'] ?? $editing ?? [
     'image_url' => '',
     'alt_text' => '',
     'purchasable' => 0,
+    'free_delivery' => 1,
     'track_stock' => 0,
     'stock_quantity' => 0,
     'low_stock_threshold' => 5,
@@ -332,6 +335,7 @@ $lowStockCount = count(array_filter(
           <label class="wide"><span>Image description</span><input name="alt_text" value="<?= h($form['alt_text'] ?? '') ?>" maxlength="250"></label>
           <div class="product-checks wide">
             <label><input type="checkbox" name="purchasable" value="1" <?= !empty($form['purchasable']) ? 'checked' : '' ?>><span>Available for online checkout</span></label>
+            <label><input type="checkbox" name="free_delivery" value="1" <?= !isset($form['free_delivery']) || !empty($form['free_delivery']) ? 'checked' : '' ?>><span>Free delivery</span></label>
             <label><input type="checkbox" name="track_stock" value="1" <?= !empty($form['track_stock']) ? 'checked' : '' ?>><span>Track available stock</span></label>
             <label><input type="checkbox" name="active" value="1" <?= !isset($form['active']) || !empty($form['active']) ? 'checked' : '' ?>><span>Published on storefront</span></label>
           </div>
@@ -360,6 +364,7 @@ $lowStockCount = count(array_filter(
               <p>
                 <?= h($product['variant']) ?> ·
                 <?= $product['price'] === null ? 'Contact for price' : '₹' . number_format((float) $product['price'], 0) ?>
+                · <?= $product['free_delivery'] ? 'Free delivery' : 'Delivery calculated separately' ?>
                 · <?= $product['track_stock'] ? number_format((int) $product['stock_quantity']) . ' in stock' : 'Stock not tracked' ?>
               </p>
             </div>

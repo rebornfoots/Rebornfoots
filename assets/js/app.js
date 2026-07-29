@@ -229,6 +229,12 @@ function productCard(product) {
   const price = document.createElement("strong");
   const variant = document.createElement("small");
   variant.textContent = product.variant;
+  if (product.freeDelivery) {
+    const delivery = document.createElement("small");
+    delivery.className = "delivery-note";
+    delivery.textContent = "Free delivery";
+    pricing.append(price, variant, delivery);
+  }
 
   if (product.inStock === false && product.price !== null) {
     price.textContent = money(product.price);
@@ -237,7 +243,7 @@ function productCard(product) {
     button.type = "button";
     button.textContent = "Out of stock";
     button.disabled = true;
-    pricing.append(price, variant);
+    if (!product.freeDelivery) pricing.append(price, variant);
     buy.append(pricing, button);
   } else if (product.purchasable && product.price !== null) {
     price.textContent = money(product.price);
@@ -246,7 +252,7 @@ function productCard(product) {
     button.type = "button";
     button.textContent = "Add to cart";
     button.addEventListener("click", () => addToCart(product.id));
-    pricing.append(price, variant);
+    if (!product.freeDelivery) pricing.append(price, variant);
     buy.append(pricing, button);
   } else {
     price.className = "contact-price";
@@ -255,7 +261,7 @@ function productCard(product) {
     link.className = "add-button contact-button";
     link.href = "tel:+918110007172";
     link.textContent = "Call to order";
-    pricing.append(price, variant);
+    if (!product.freeDelivery) pricing.append(price, variant);
     buy.append(pricing, link);
   }
 
