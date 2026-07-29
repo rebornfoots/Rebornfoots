@@ -1,0 +1,7 @@
+.gitignore export-ignore
+.gitattributes export-ignore
+.env.example export-ignore
+README.md export-ignore
+DEPLOYMENT.md export-ignore
+database export-ignore
+
