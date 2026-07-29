@@ -1,4 +1,4 @@
-# Farmers2Home
+# InbornFoot
 
 A lightweight, responsive storefront for traditional South Indian dairy products
 and palm jaggery. The frontend uses semantic HTML, custom CSS and vanilla
@@ -51,5 +51,5 @@ compromised. Rotate the database password and Telegram bot token before deployin
 If the Git remote was shared, remove the old secrets from repository history as a
 separate, coordinated maintenance action.
 
-Replace the sample contact email and externally hosted product photography with
-the business's final contact details and licensed, locally optimized images.
+Replace the externally hosted product photography with licensed, locally
+optimized images before production.

@@ -174,7 +174,7 @@ $dbUser = getenv('F2H_DB_USER') ?: '';
 $dbPassword = getenv('F2H_DB_PASSWORD') ?: '';
 
 if ($dbHost === '' || $dbName === '' || $dbUser === '') {
-    error_log('Farmers2Home: database environment variables are not configured.');
+    error_log('InbornFoot: database environment variables are not configured.');
     respond(503, ['status' => 'error', 'message' => 'Ordering is temporarily unavailable. Please contact us.']);
 }
 
@@ -194,12 +194,12 @@ try {
     $statement->close();
     $database->close();
 } catch (Throwable $error) {
-    error_log('Farmers2Home order error: ' . $error->getMessage());
+    error_log('InbornFoot order error: ' . $error->getMessage());
     respond(500, ['status' => 'error', 'message' => 'We could not save your order. Please try again.']);
 }
 
 $lines = [
-    '🧺 <b>Farmers2Home order</b>',
+    '🧺 <b>InbornFoot order</b>',
     '',
     '🆔 <b>Order:</b> #' . $orderId,
     '👤 <b>Name:</b> ' . telegramEscape($name),

@@ -8,7 +8,7 @@ const PRODUCTS = {
   "buffalo-ghee-1l": { name: "Village-Style Ghee", variant: "1 litre · 2 × 500 ml", price: 1050 }
 };
 
-const STORAGE_KEY = "farmers2home_cart_v2";
+const STORAGE_KEY = "inbornfoot_cart_v2";
 let cart = loadCart();
 let toastTimer;
 
