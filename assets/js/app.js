@@ -33,8 +33,15 @@ const elements = {
   checkoutForm: document.querySelector("#checkoutForm"),
   customerPincode: document.querySelector("#customerPincode"),
   deliveryQuote: document.querySelector("#deliveryQuote"),
+  couponCode: document.querySelector("#couponCode"),
+  applyCouponButton: document.querySelector("#applyCouponButton"),
+  promotionMessage: document.querySelector("#promotionMessage"),
   checkoutSubtotal: document.querySelector("#checkoutSubtotal"),
   checkoutDeliveryFee: document.querySelector("#checkoutDeliveryFee"),
+  comboDiscountRow: document.querySelector("#comboDiscountRow"),
+  couponDiscountRow: document.querySelector("#couponDiscountRow"),
+  checkoutComboDiscount: document.querySelector("#checkoutComboDiscount"),
+  checkoutCouponDiscount: document.querySelector("#checkoutCouponDiscount"),
   checkoutTotal: document.querySelector("#checkoutTotal"),
   placeOrderButton: document.querySelector("#placeOrderButton"),
   formMessage: document.querySelector("#formMessage"),
@@ -83,17 +90,25 @@ function cartTotal() {
 function renderCheckoutTotal() {
   const subtotal = cartTotal();
   const fee = deliveryQuoteState?.serviceable ? deliveryQuoteState.deliveryFee : 0;
+  const comboDiscount = deliveryQuoteState?.comboDiscount || 0;
+  const couponDiscount = deliveryQuoteState?.couponDiscount || 0;
   elements.checkoutSubtotal.textContent = money(subtotal);
   elements.checkoutDeliveryFee.textContent = deliveryQuoteState?.serviceable
     ? (fee > 0 ? money(fee) : "Free")
     : "—";
-  elements.checkoutTotal.textContent = money(subtotal + fee);
+  elements.comboDiscountRow.hidden = comboDiscount <= 0;
+  elements.couponDiscountRow.hidden = couponDiscount <= 0;
+  elements.checkoutComboDiscount.textContent = `−${money(comboDiscount)}`;
+  elements.checkoutCouponDiscount.textContent = `−${money(couponDiscount)}`;
+  elements.checkoutTotal.textContent = money(Math.max(0, subtotal - comboDiscount - couponDiscount) + fee);
 }
 
 function resetDeliveryQuote(message = "Enter your PIN code to check delivery.") {
   deliveryQuoteState = null;
   elements.deliveryQuote.textContent = message;
   elements.deliveryQuote.className = "delivery-quote";
+  elements.promotionMessage.textContent = "Combo offers apply automatically.";
+  elements.promotionMessage.className = "delivery-quote";
   renderCheckoutTotal();
 }
 
@@ -102,8 +117,16 @@ async function loadDeliveryQuote(pincode) {
   elements.deliveryQuote.textContent = "Checking delivery…";
   elements.deliveryQuote.className = "delivery-quote";
   try {
-    const response = await fetch(`delivery_quote.php?pincode=${encodeURIComponent(pincode)}`, {
-      headers: { "Accept": "application/json" }
+    const couponCode = elements.couponCode.value.trim().toUpperCase();
+    elements.couponCode.value = couponCode;
+    const response = await fetch("pricing_quote.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({
+        pincode,
+        couponCode,
+        items: Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }))
+      })
     });
     const result = await response.json().catch(() => ({}));
     if (sequence !== deliveryQuoteSequence) return null;
@@ -116,20 +139,38 @@ async function loadDeliveryQuote(pincode) {
       deliveryFee: Number(result.deliveryFee) || 0,
       minDays: Number(result.minDays),
       maxDays: Number(result.maxDays),
-      areaName: result.areaName || ""
+      areaName: result.areaName || "",
+      comboDiscount: Number(result.comboDiscount) || 0,
+      couponDiscount: Number(result.couponDiscount) || 0,
+      discountTotal: Number(result.discountTotal) || 0,
+      couponCode: result.couponCode || "",
+      combos: Array.isArray(result.combos) ? result.combos : []
     };
     const area = deliveryQuoteState.areaName ? `${deliveryQuoteState.areaName} · ` : "";
     const fee = deliveryQuoteState.deliveryFee > 0 ? money(deliveryQuoteState.deliveryFee) : "Free delivery";
     elements.deliveryQuote.textContent =
       `${area}${fee} · Estimated ${deliveryQuoteState.minDays}–${deliveryQuoteState.maxDays} days`;
     elements.deliveryQuote.className = "delivery-quote success";
+    const messages = [];
+    if (deliveryQuoteState.combos.length) {
+      messages.push(`Combo savings ${money(deliveryQuoteState.comboDiscount)} applied`);
+    }
+    if (deliveryQuoteState.couponCode) {
+      messages.push(`Coupon ${deliveryQuoteState.couponCode} applied`);
+    }
+    elements.promotionMessage.textContent = messages.length
+      ? messages.join(" · ")
+      : "No promotion applied. Combo offers activate automatically.";
+    elements.promotionMessage.className = `delivery-quote${messages.length ? " success" : ""}`;
     renderCheckoutTotal();
     return deliveryQuoteState;
   } catch (error) {
     if (sequence !== deliveryQuoteSequence) return null;
     deliveryQuoteState = null;
-    elements.deliveryQuote.textContent = error.message;
-    elements.deliveryQuote.className = "delivery-quote error";
+    const couponAttempted = elements.couponCode.value.trim() !== "";
+    const messageElement = couponAttempted ? elements.promotionMessage : elements.deliveryQuote;
+    messageElement.textContent = error.message;
+    messageElement.className = "delivery-quote error";
     renderCheckoutTotal();
     throw error;
   }
@@ -308,7 +349,6 @@ function productCard(product) {
     button.type = "button";
     button.textContent = "Out of stock";
     button.disabled = true;
-    if (!product.freeDelivery) pricing.append(price, variant);
     buy.append(pricing, button);
   } else if (product.purchasable && product.price !== null) {
     price.textContent = money(product.price);
@@ -317,7 +357,6 @@ function productCard(product) {
     button.type = "button";
     button.textContent = "Add to cart";
     button.addEventListener("click", () => addToCart(product.id));
-    if (!product.freeDelivery) pricing.append(price, variant);
     buy.append(pricing, button);
   } else {
     price.className = "contact-price";
@@ -326,7 +365,6 @@ function productCard(product) {
     link.className = "add-button contact-button";
     link.href = "tel:+918110007172";
     link.textContent = "Call to order";
-    if (!product.freeDelivery) pricing.append(price, variant);
     buy.append(pricing, link);
   }
 
@@ -373,7 +411,10 @@ async function submitOrder(event) {
 
   const formData = new FormData(elements.checkoutForm);
   const pincode = formData.get("pincode").trim();
-  if (!deliveryQuoteState || deliveryQuoteState.pincode !== pincode) {
+  const requestedCoupon = elements.couponCode.value.trim().toUpperCase();
+  if (!deliveryQuoteState
+      || deliveryQuoteState.pincode !== pincode
+      || deliveryQuoteState.couponCode !== requestedCoupon) {
     clearTimeout(deliveryQuoteTimer);
     try {
       const quote = await loadDeliveryQuote(pincode);
@@ -389,6 +430,7 @@ async function submitOrder(event) {
     phone: formData.get("phone").trim(),
     address: formData.get("address").trim(),
     pincode,
+    couponCode: elements.couponCode.value.trim().toUpperCase(),
     payment: "Razorpay",
     items: Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }))
   };
@@ -410,7 +452,12 @@ async function submitOrder(event) {
     deliveryQuoteState = {
       pincode,
       serviceable: true,
-      deliveryFee: Number(result.deliveryFee) || 0
+      deliveryFee: Number(result.deliveryFee) || 0,
+      comboDiscount: Number(result.comboDiscount) || 0,
+      couponDiscount: Number(result.couponDiscount) || 0,
+      discountTotal: Number(result.discountTotal) || 0,
+      couponCode: result.couponCode || "",
+      combos: Array.isArray(result.combos) ? result.combos : []
     };
     renderCheckoutTotal();
 
@@ -519,6 +566,24 @@ elements.customerPincode.addEventListener("input", () => {
   deliveryQuoteTimer = setTimeout(() => {
     loadDeliveryQuote(pincode).catch(() => {});
   }, 300);
+});
+elements.applyCouponButton.addEventListener("click", () => {
+  checkoutRequestId = null;
+  clearTimeout(deliveryQuoteTimer);
+  const pincode = elements.customerPincode.value.trim();
+  if (!/^[1-9]\d{5}$/.test(pincode)) {
+    elements.deliveryQuote.textContent = "Enter a valid PIN code first.";
+    elements.deliveryQuote.className = "delivery-quote error";
+    return;
+  }
+  loadDeliveryQuote(pincode).catch(() => {});
+});
+elements.couponCode.addEventListener("input", () => {
+  checkoutRequestId = null;
+  deliveryQuoteState = null;
+  elements.promotionMessage.textContent = "Click Apply to validate this coupon.";
+  elements.promotionMessage.className = "delivery-quote";
+  renderCheckoutTotal();
 });
 elements.checkoutDialog.addEventListener("click", event => {
   if (event.target === elements.checkoutDialog) closeCheckout();

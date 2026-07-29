@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require __DIR__ . '/includes/pricing.php';
+
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
@@ -123,6 +125,7 @@ $phone = preg_replace('/\D/', '', (string) ($request['phone'] ?? '')) ?? '';
 $address = cleanText($request['address'] ?? '');
 $pincode = preg_replace('/\D/', '', (string) ($request['pincode'] ?? '')) ?? '';
 $payment = (string) ($request['payment'] ?? '');
+$couponCode = normalizedCouponCode($request['couponCode'] ?? '');
 $items = $request['items'] ?? null;
 
 $errors = [];
@@ -143,6 +146,9 @@ if (!preg_match('/^[1-9]\d{5}$/', $pincode)) {
 }
 if ($payment !== 'Razorpay') {
     $errors[] = 'Select a supported payment method.';
+}
+if ($couponCode !== '' && !preg_match('/^[A-Z0-9_-]{3,30}$/', $couponCode)) {
+    $errors[] = 'Enter a valid coupon code.';
 }
 if (!is_array($items) || count($items) < 1 || count($items) > 50) {
     $errors[] = 'Your cart is empty or invalid.';
@@ -193,8 +199,8 @@ try {
 
     // Return the original result when a browser safely retries the same checkout.
     $existingStatement = $database->prepare(
-        'SELECT id, customer_name, phone, subtotal, delivery_fee, total, estimated_delivery_date,
-                gateway_order_id
+        'SELECT id, customer_name, phone, subtotal, delivery_fee, coupon_code, coupon_discount,
+                combo_discount, discount_total, total, estimated_delivery_date, gateway_order_id
          FROM orders WHERE request_key = ? LIMIT 1'
     );
     $existingStatement->bind_param('s', $requestId);
@@ -210,6 +216,10 @@ try {
             'orderId' => (int) $existingOrder['id'],
             'subtotal' => (float) $existingOrder['subtotal'],
             'deliveryFee' => (float) $existingOrder['delivery_fee'],
+            'couponCode' => (string) $existingOrder['coupon_code'],
+            'couponDiscount' => (float) $existingOrder['coupon_discount'],
+            'comboDiscount' => (float) $existingOrder['combo_discount'],
+            'discountTotal' => (float) $existingOrder['discount_total'],
             'total' => (float) $existingOrder['total'],
             'estimatedDeliveryDate' => $existingOrder['estimated_delivery_date'],
             'duplicate' => true,
@@ -288,7 +298,16 @@ try {
         $itemsSubtotal += $subtotal;
     }
 
-    $total = $itemsSubtotal + $deliveryFee;
+    try {
+        $promotions = calculatePromotions($database, $validatedItems, $itemsSubtotal, $couponCode);
+    } catch (DomainException $promotionError) {
+        respond(422, ['status' => 'error', 'message' => $promotionError->getMessage()]);
+    }
+    $couponCode = $promotions['couponCode'];
+    $couponDiscount = (float) $promotions['couponDiscount'];
+    $comboDiscount = (float) $promotions['comboDiscount'];
+    $discountTotal = (float) $promotions['discountTotal'];
+    $total = round(max(0, $itemsSubtotal - $discountTotal) + $deliveryFee, 2);
     $amountPaise = (int) round($total * 100);
     try {
         $gatewayOrder = createRazorpayOrder(
@@ -312,13 +331,18 @@ try {
     $estimatedDeliveryDate = (new DateTimeImmutable('today'))
         ->modify("+{$maxDeliveryDays} days")
         ->format('Y-m-d');
+    $promotionsJson = json_encode([
+        'coupon' => $promotions['coupon'],
+        'combos' => $promotions['combos'],
+    ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     $statement = $database->prepare(
         'INSERT INTO orders (request_key, customer_name, phone, address, postal_code, payment_method,
-         gateway_order_id, order_details, subtotal, delivery_fee, total, estimated_delivery_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+         gateway_order_id, order_details, subtotal, delivery_fee, coupon_code, coupon_discount,
+         combo_discount, discount_total, promotions_json, total, estimated_delivery_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $statement->bind_param(
-        'ssssssssddds',
+        'ssssssssddsdddsds',
         $requestId,
         $name,
         $phone,
@@ -329,12 +353,32 @@ try {
         $orderDetails,
         $itemsSubtotal,
         $deliveryFee,
+        $couponCode,
+        $couponDiscount,
+        $comboDiscount,
+        $discountTotal,
+        $promotionsJson,
         $total,
         $estimatedDeliveryDate
     );
     $statement->execute();
     $orderId = $database->insert_id;
     $statement->close();
+
+    if ($couponCode !== '') {
+        $couponUsage = $database->prepare(
+            'UPDATE coupons SET used_count = used_count + 1
+             WHERE code = ? AND active = 1
+               AND (usage_limit IS NULL OR used_count < usage_limit)'
+        );
+        $couponUsage->bind_param('s', $couponCode);
+        $couponUsage->execute();
+        if ($couponUsage->affected_rows !== 1) {
+            $couponUsage->close();
+            throw new DomainException('This coupon is no longer available.');
+        }
+        $couponUsage->close();
+    }
 
     $historyStatement = $database->prepare(
         "INSERT INTO order_status_history (order_id, status, source) VALUES (?, 'pending', 'system')"
@@ -362,7 +406,8 @@ try {
     ) {
         try {
             $retryStatement = $database->prepare(
-                'SELECT id, customer_name, phone, subtotal, delivery_fee, total,
+                'SELECT id, customer_name, phone, subtotal, delivery_fee, coupon_code,
+                        coupon_discount, combo_discount, discount_total, total,
                         estimated_delivery_date, gateway_order_id
                  FROM orders WHERE request_key = ? LIMIT 1'
             );
@@ -376,6 +421,10 @@ try {
                     'orderId' => (int) $retryOrder['id'],
                     'subtotal' => (float) $retryOrder['subtotal'],
                     'deliveryFee' => (float) $retryOrder['delivery_fee'],
+                    'couponCode' => (string) $retryOrder['coupon_code'],
+                    'couponDiscount' => (float) $retryOrder['coupon_discount'],
+                    'comboDiscount' => (float) $retryOrder['combo_discount'],
+                    'discountTotal' => (float) $retryOrder['discount_total'],
                     'total' => (float) $retryOrder['total'],
                     'estimatedDeliveryDate' => $retryOrder['estimated_delivery_date'],
                     'duplicate' => true,
@@ -388,6 +437,9 @@ try {
         } catch (Throwable $retryError) {
             error_log('InbornFoot retry lookup error: ' . $retryError->getMessage());
         }
+    }
+    if ($error instanceof DomainException) {
+        respond(409, ['status' => 'error', 'message' => $error->getMessage()]);
     }
     error_log('InbornFoot order error: ' . $error->getMessage());
     respond(500, ['status' => 'error', 'message' => 'We could not save your order. Please try again.']);
@@ -414,6 +466,7 @@ foreach ($validatedItems as $item) {
 }
 $lines[] = '';
 $lines[] = 'Subtotal: ₹' . number_format($itemsSubtotal, 0);
+$lines[] = 'Discount: -₹' . number_format($discountTotal, 0);
 $lines[] = 'Delivery: ' . ($deliveryFee > 0 ? '₹' . number_format($deliveryFee, 0) : 'Free');
 $lines[] = '💰 <b>Total: ₹' . number_format($total, 0) . '</b>';
 $lines[] = "Estimated delivery: {$minDeliveryDays}-{$maxDeliveryDays} days";
@@ -430,6 +483,11 @@ respond(201, [
     'orderId' => $orderId,
     'subtotal' => $itemsSubtotal,
     'deliveryFee' => $deliveryFee,
+    'couponCode' => $couponCode,
+    'couponDiscount' => $couponDiscount,
+    'comboDiscount' => $comboDiscount,
+    'discountTotal' => $discountTotal,
+    'combos' => $promotions['combos'],
     'total' => $total,
     'estimatedDeliveryDate' => $estimatedDeliveryDate,
     'razorpayKeyId' => $razorpayKeyId,

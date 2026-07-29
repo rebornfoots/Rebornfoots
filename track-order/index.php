@@ -110,7 +110,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $database->set_charset('utf8mb4');
                 $statement = $database->prepare(
                     'SELECT id, customer_name, payment_method, payment_status, order_details,
-                            subtotal, delivery_fee, total, status, postal_code,
+                            subtotal, delivery_fee, coupon_code, coupon_discount,
+                            combo_discount, discount_total, total, status, postal_code,
                             courier_name, tracking_number, tracking_url, estimated_delivery_date,
                             created_at, updated_at
                      FROM orders WHERE id = ? AND phone = ? LIMIT 1'
@@ -272,6 +273,8 @@ $reorderItems = $order
           </div>
           <aside>
             <div><span>Items subtotal</span><strong>₹<?= number_format((float) $order['subtotal'], 0) ?></strong></div>
+            <?php if ((float) $order['combo_discount'] > 0): ?><div><span>Combo savings</span><strong>−₹<?= number_format((float) $order['combo_discount'], 0) ?></strong></div><?php endif; ?>
+            <?php if ((float) $order['coupon_discount'] > 0): ?><div><span>Coupon <?= escape($order['coupon_code']) ?></span><strong>−₹<?= number_format((float) $order['coupon_discount'], 0) ?></strong></div><?php endif; ?>
             <div><span>Delivery</span><strong><?= (float) $order['delivery_fee'] > 0 ? '₹' . number_format((float) $order['delivery_fee'], 0) : 'Free' ?></strong></div>
             <div><span>Order total</span><strong>₹<?= number_format((float) $order['total'], 0) ?></strong></div>
             <div><span>Payment</span><strong><?= escape($order['payment_method']) ?> · <?= escape(ucwords(str_replace('_', ' ', (string) $order['payment_status']))) ?></strong></div>

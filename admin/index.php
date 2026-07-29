@@ -315,7 +315,8 @@ try {
 
     $query = 'SELECT orders.id, customer_name, phone, address, postal_code, payment_method, payment_status,
                      gateway_order_id, orders.gateway_payment_id, order_details,
-                     subtotal, delivery_fee, total, orders.status,
+                     subtotal, delivery_fee, coupon_code, coupon_discount,
+                     combo_discount, discount_total, total, orders.status,
                      courier_name, tracking_number, tracking_url, estimated_delivery_date,
                      orders.created_at, orders.updated_at
                      , payment_refunds.gateway_refund_id AS refund_id,
@@ -379,6 +380,7 @@ $currentQuery = http_build_query(array_filter([
     </a>
     <div class="admin-actions">
       <a href="/admin/products.php">Products</a>
+      <a href="/admin/promotions.php">Promotions</a>
       <a href="/" target="_blank" rel="noopener">View store ↗</a>
       <form method="post" action="/admin/logout.php">
         <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
@@ -492,6 +494,13 @@ $currentQuery = http_build_query(array_filter([
                       <p><?= h($order['payment_method']) ?> · <?= h(ucwords(str_replace('_', ' ', (string) $order['payment_status']))) ?></p>
                       <strong>Delivery charge</strong>
                       <p><?= (float) $order['delivery_fee'] > 0 ? '₹' . number_format((float) $order['delivery_fee'], 0) : 'Free' ?></p>
+                      <?php if ((float) $order['discount_total'] > 0): ?>
+                        <strong>Promotion savings</strong>
+                        <p>
+                          −₹<?= number_format((float) $order['discount_total'], 0) ?>
+                          <?= $order['coupon_code'] !== '' ? ' · ' . h($order['coupon_code']) : '' ?>
+                        </p>
+                      <?php endif; ?>
                       <?php if ($order['gateway_order_id'] !== null): ?><strong>Gateway order</strong><p><?= h($order['gateway_order_id']) ?></p><?php endif; ?>
                       <?php if ($order['gateway_payment_id'] !== null): ?><strong>Gateway payment</strong><p><?= h($order['gateway_payment_id']) ?></p><?php endif; ?>
                       <?php if ($order['refund_status'] !== null): ?>

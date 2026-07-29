@@ -286,6 +286,7 @@ $lowStockCount = count(array_filter(
     </a>
     <div class="admin-actions">
       <a href="/admin/">Orders</a>
+      <a href="/admin/promotions.php">Promotions</a>
       <a href="/" target="_blank" rel="noopener">View store ↗</a>
       <form method="post" action="/admin/logout.php">
         <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
