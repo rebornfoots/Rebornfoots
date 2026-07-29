@@ -143,6 +143,8 @@ if ($dbHost === '' || $dbName === '' || $dbUser === '') {
 }
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+$database = null;
+$transactionStarted = false;
 try {
     $database = new mysqli($dbHost, $dbUser, $dbPassword, $dbName);
     $database->set_charset('utf8mb4');
@@ -189,6 +191,8 @@ try {
         $total += $subtotal;
     }
 
+    $database->begin_transaction();
+    $transactionStarted = true;
     $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     $statement = $database->prepare(
         'INSERT INTO orders (customer_name, phone, address, payment_method, order_details, total)
@@ -198,8 +202,24 @@ try {
     $statement->execute();
     $orderId = $database->insert_id;
     $statement->close();
+
+    $historyStatement = $database->prepare(
+        "INSERT INTO order_status_history (order_id, status, source) VALUES (?, 'pending', 'system')"
+    );
+    $historyStatement->bind_param('i', $orderId);
+    $historyStatement->execute();
+    $historyStatement->close();
+    $database->commit();
+    $transactionStarted = false;
     $database->close();
 } catch (Throwable $error) {
+    if ($database instanceof mysqli && $transactionStarted) {
+        try {
+            $database->rollback();
+        } catch (Throwable) {
+            // Preserve the original failure for logging.
+        }
+    }
     error_log('InbornFoot order error: ' . $error->getMessage());
     respond(500, ['status' => 'error', 'message' => 'We could not save your order. Please try again.']);
 }

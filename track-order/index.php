@@ -73,6 +73,7 @@ function trackingItems(string $details): array
 }
 
 $order = null;
+$history = [];
 $error = '';
 $submittedOrderId = trim((string) ($_POST['order_id'] ?? ''));
 $submittedPhone = preg_replace('/\D/', '', (string) ($_POST['phone'] ?? '')) ?? '';
@@ -115,15 +116,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statement->execute();
                 $order = $statement->get_result()->fetch_assoc() ?: null;
                 $statement->close();
-                $database->close();
 
                 if ($order === null) {
                     registerFailedLookup();
                     usleep(300000);
                     $error = 'We could not find an order matching those details.';
                 } else {
+                    $historyStatement = $database->prepare(
+                        'SELECT status, source, created_at
+                         FROM order_status_history WHERE order_id = ? ORDER BY created_at, id'
+                    );
+                    $historyStatement->bind_param('i', $orderId);
+                    $historyStatement->execute();
+                    $history = $historyStatement->get_result()->fetch_all(MYSQLI_ASSOC);
+                    $historyStatement->close();
                     $_SESSION['lookup_attempts'] = [];
                 }
+                $database->close();
             } catch (Throwable $exception) {
                 error_log('InbornFoot tracking error: ' . $exception->getMessage());
                 $error = 'Order tracking is temporarily unavailable. Please try again shortly.';
@@ -135,6 +144,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stageIndex = $order && $order['status'] !== 'cancelled'
     ? array_search((string) $order['status'], ORDER_STAGES, true)
     : false;
+$historyByStatus = [];
+foreach ($history as $event) {
+    $eventStatus = (string) ($event['status'] ?? '');
+    if (!isset($historyByStatus[$eventStatus])) {
+        $historyByStatus[$eventStatus] = (string) $event['created_at'];
+    }
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -199,6 +215,9 @@ $stageIndex = $order && $order['status'] !== 'cancelled'
               <li class="<?= $state ?>">
                 <span><?= $state === 'complete' ? '✓' : $index + 1 ?></span>
                 <strong><?= escape(ucfirst($stage)) ?></strong>
+                <?php if (isset($historyByStatus[$stage])): ?>
+                  <small><?= escape(date('d M, g:i A', strtotime($historyByStatus[$stage]))) ?></small>
+                <?php endif; ?>
               </li>
             <?php endforeach; ?>
           </ol>

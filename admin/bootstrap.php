@@ -147,7 +147,7 @@ function updateOrderStatusWithInventory(int $orderId, string $newStatus): bool
 
     try {
         $orderStatement = $database->prepare(
-            'SELECT order_details, inventory_deducted FROM orders WHERE id = ? FOR UPDATE'
+            'SELECT status, order_details, inventory_deducted FROM orders WHERE id = ? FOR UPDATE'
         );
         $orderStatement->bind_param('i', $orderId);
         $orderStatement->execute();
@@ -158,6 +158,7 @@ function updateOrderStatusWithInventory(int $orderId, string $newStatus): bool
         }
 
         $inventoryDeducted = (bool) $order['inventory_deducted'];
+        $statusChanged = (string) $order['status'] !== $newStatus;
         $items = normalizedOrderItems((string) $order['order_details']);
 
         if (in_array($newStatus, $stockStatuses, true) && !$inventoryDeducted) {
@@ -216,10 +217,18 @@ function updateOrderStatusWithInventory(int $orderId, string $newStatus): bool
         );
         $updateStatement->bind_param('sii', $newStatus, $deductedValue, $orderId);
         $updateStatement->execute();
-        $changed = $updateStatement->affected_rows > 0;
         $updateStatement->close();
+
+        if ($statusChanged) {
+            $historyStatement = $database->prepare(
+                "INSERT INTO order_status_history (order_id, status, source) VALUES (?, ?, 'admin')"
+            );
+            $historyStatement->bind_param('is', $orderId, $newStatus);
+            $historyStatement->execute();
+            $historyStatement->close();
+        }
         $database->commit();
-        return $changed;
+        return $statusChanged;
     } catch (Throwable $error) {
         $database->rollback();
         throw $error;

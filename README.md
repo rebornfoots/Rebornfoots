@@ -96,6 +96,10 @@ total and last update, but never exposes the delivery address.
 Tracking lookups use prepared queries, CSRF protection, generic failure messages,
 session-based throttling, private no-store responses and search-engine blocking.
 Cancelled orders display the support phone number instead of an active timeline.
+Every new order and admin status change is recorded in `order_status_history` in
+the same transaction as the underlying change. Run
+`database/migrate_order_status_history.sql` once on an existing database to create
+the audit table and backfill one baseline event per existing order.
 
 After checkout, customers receive a clear on-screen receipt containing their order
 number and a direct link to the tracking page. The admin orders table includes a

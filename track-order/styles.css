@@ -50,6 +50,7 @@ h1, h2 { font-family: Georgia, serif; letter-spacing: -.03em; }
 .timeline li:first-child::before { display: none; }
 .timeline li span { position: relative; z-index: 1; display: grid; width: 34px; height: 34px; margin: 0 auto 8px; place-items: center; color: var(--muted); background: #edf0ed; border-radius: 50%; font-size: 11px; font-weight: 850; }
 .timeline li strong { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.timeline li small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
 .timeline li.complete::before, .timeline li.current::before { background: var(--leaf); }
 .timeline li.complete span, .timeline li.current span { color: #fff; background: var(--leaf); }
 .timeline li.complete strong, .timeline li.current strong { color: var(--forest); }
@@ -84,6 +85,7 @@ footer { padding: 25px; color: var(--muted); text-align: center; font-size: 10px
   .timeline li::before { top: -20px; bottom: 35px; left: 16px; width: 2px; height: auto; }
   .timeline li span { grid-column: 1; margin: 0; }
   .timeline li strong { grid-column: 2; padding-top: 9px; }
+  .timeline li small { grid-column: 2; }
   .order-summary { grid-template-columns: 1fr; }
   .items { padding: 23px 20px; }
   .order-summary aside { border-top: 1px solid var(--line); border-left: 0; }

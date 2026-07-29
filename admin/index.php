@@ -141,6 +141,7 @@ $perPage = 20;
 $offset = ($page - 1) * $perPage;
 $databaseError = '';
 $orders = [];
+$orderHistory = [];
 $totalOrders = 0;
 $metrics = ['today_orders' => 0, 'pending_orders' => 0, 'month_sales' => 0, 'month_orders' => 0];
 
@@ -195,6 +196,24 @@ try {
     $queryStatement->execute();
     $orders = $queryStatement->get_result()->fetch_all(MYSQLI_ASSOC);
     $queryStatement->close();
+
+    if ($orders !== []) {
+        $visibleOrderIds = array_map(static fn (array $order): int => (int) $order['id'], $orders);
+        $historyPlaceholders = implode(',', array_fill(0, count($visibleOrderIds), '?'));
+        $historyTypes = str_repeat('i', count($visibleOrderIds));
+        $historyStatement = database()->prepare(
+            "SELECT order_id, status, source, created_at
+             FROM order_status_history
+             WHERE order_id IN ({$historyPlaceholders})
+             ORDER BY created_at, id"
+        );
+        $historyStatement->bind_param($historyTypes, ...$visibleOrderIds);
+        $historyStatement->execute();
+        foreach ($historyStatement->get_result()->fetch_all(MYSQLI_ASSOC) as $event) {
+            $orderHistory[(int) $event['order_id']][] = $event;
+        }
+        $historyStatement->close();
+    }
 } catch (Throwable $error) {
     error_log('InbornFoot admin dashboard error: ' . $error->getMessage());
     $databaseError = 'Orders are temporarily unavailable. Check the database configuration.';
@@ -299,6 +318,14 @@ $trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-ord
                       <p><?= h($order['payment_method']) ?></p>
                       <strong>Last updated</strong>
                       <p><?= h(date('d M Y, g:i A', strtotime((string) $order['updated_at']))) ?></p>
+                      <?php if (!empty($orderHistory[(int) $order['id']])): ?>
+                        <strong>Status history</strong>
+                        <ol class="status-history">
+                          <?php foreach ($orderHistory[(int) $order['id']] as $event): ?>
+                            <li><span><?= h(statusLabel((string) $event['status'])) ?></span><time><?= h(date('d M, g:i A', strtotime((string) $event['created_at']))) ?></time></li>
+                          <?php endforeach; ?>
+                        </ol>
+                      <?php endif; ?>
                     </div>
                   </details>
                 </td>
