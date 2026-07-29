@@ -10,6 +10,7 @@ let PRODUCTS = {
 
 const STORAGE_KEY = "inbornfoot_cart_v2";
 let cart = loadCart();
+let checkoutRequestId = null;
 let toastTimer;
 
 const elements = {
@@ -307,7 +308,9 @@ async function submitOrder(event) {
   if (!elements.checkoutForm.reportValidity() || !cartQuantity()) return;
 
   const formData = new FormData(elements.checkoutForm);
+  checkoutRequestId ||= crypto.randomUUID();
   const payload = {
+    requestId: checkoutRequestId,
     name: formData.get("name").trim(),
     phone: formData.get("phone").trim(),
     address: formData.get("address").trim(),
@@ -336,6 +339,7 @@ async function submitOrder(event) {
     closeCheckout();
     elements.successOrderId.textContent = result.orderId;
     elements.orderSuccessDialog.showModal();
+    checkoutRequestId = null;
   } catch (error) {
     elements.formMessage.textContent = error.message;
     elements.formMessage.hidden = false;

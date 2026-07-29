@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS orders (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    request_key CHAR(36) NOT NULL,
     customer_name VARCHAR(100) NOT NULL,
     phone VARCHAR(15) NOT NULL,
     address VARCHAR(500) NOT NULL,
@@ -11,6 +12,7 @@ CREATE TABLE IF NOT EXISTS orders (
         NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX idx_orders_request_key (request_key),
     INDEX idx_orders_phone (phone),
     INDEX idx_orders_status_created (status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

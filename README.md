@@ -104,6 +104,8 @@ Every new order and admin status change is recorded in `order_status_history` in
 the same transaction as the underlying change. Run
 `database/migrate_order_status_history.sql` once on an existing database to create
 the audit table and backfill one baseline event per existing order.
+Run `database/migrate_order_idempotency.sql` once to ensure browser or network
+retries return the original order instead of creating a duplicate.
 
 After checkout, customers receive a clear on-screen receipt containing their order
 number and a direct link to the tracking page. The admin orders table includes a

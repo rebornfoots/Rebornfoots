@@ -86,12 +86,16 @@ if (!is_array($request)) {
 }
 
 $name = cleanText($request['name'] ?? '');
+$requestId = strtolower((string) ($request['requestId'] ?? ''));
 $phone = preg_replace('/\D/', '', (string) ($request['phone'] ?? '')) ?? '';
 $address = cleanText($request['address'] ?? '');
 $payment = (string) ($request['payment'] ?? '');
 $items = $request['items'] ?? null;
 
 $errors = [];
+if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $requestId)) {
+    $errors[] = 'Invalid checkout request. Refresh and try again.';
+}
 if (mb_strlen($name) < 2 || mb_strlen($name) > 100) {
     $errors[] = 'Enter a valid full name.';
 }
@@ -149,6 +153,26 @@ try {
     $database = new mysqli($dbHost, $dbUser, $dbPassword, $dbName);
     $database->set_charset('utf8mb4');
 
+    // Return the original result when a browser safely retries the same checkout.
+    $existingStatement = $database->prepare(
+        'SELECT id, phone, total FROM orders WHERE request_key = ? LIMIT 1'
+    );
+    $existingStatement->bind_param('s', $requestId);
+    $existingStatement->execute();
+    $existingOrder = $existingStatement->get_result()->fetch_assoc();
+    $existingStatement->close();
+    if ($existingOrder !== null) {
+        if (!hash_equals((string) $existingOrder['phone'], $phone)) {
+            respond(409, ['status' => 'error', 'message' => 'This checkout request is no longer valid. Refresh and try again.']);
+        }
+        respond(200, [
+            'status' => 'success',
+            'orderId' => (int) $existingOrder['id'],
+            'total' => (float) $existingOrder['total'],
+            'duplicate' => true,
+        ]);
+    }
+
     // Product identity, availability and prices always come from MySQL.
     $productIds = array_keys($requestedItems);
     $placeholders = implode(',', array_fill(0, count($productIds), '?'));
@@ -195,10 +219,10 @@ try {
     $transactionStarted = true;
     $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     $statement = $database->prepare(
-        'INSERT INTO orders (customer_name, phone, address, payment_method, order_details, total)
-         VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO orders (request_key, customer_name, phone, address, payment_method, order_details, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
-    $statement->bind_param('sssssd', $name, $phone, $address, $payment, $orderDetails, $total);
+    $statement->bind_param('ssssssd', $requestId, $name, $phone, $address, $payment, $orderDetails, $total);
     $statement->execute();
     $orderId = $database->insert_id;
     $statement->close();
@@ -216,8 +240,35 @@ try {
     if ($database instanceof mysqli && $transactionStarted) {
         try {
             $database->rollback();
+            $transactionStarted = false;
         } catch (Throwable) {
             // Preserve the original failure for logging.
+        }
+    }
+    // Two simultaneous retries can both pass the early lookup. The unique
+    // request key makes one insert win; return that winning order to the loser.
+    if ($database instanceof mysqli
+        && $error instanceof mysqli_sql_exception
+        && $error->getCode() === 1062
+    ) {
+        try {
+            $retryStatement = $database->prepare(
+                'SELECT id, phone, total FROM orders WHERE request_key = ? LIMIT 1'
+            );
+            $retryStatement->bind_param('s', $requestId);
+            $retryStatement->execute();
+            $retryOrder = $retryStatement->get_result()->fetch_assoc();
+            $retryStatement->close();
+            if ($retryOrder !== null && hash_equals((string) $retryOrder['phone'], $phone)) {
+                respond(200, [
+                    'status' => 'success',
+                    'orderId' => (int) $retryOrder['id'],
+                    'total' => (float) $retryOrder['total'],
+                    'duplicate' => true,
+                ]);
+            }
+        } catch (Throwable $retryError) {
+            error_log('InbornFoot retry lookup error: ' . $retryError->getMessage());
         }
     }
     error_log('InbornFoot order error: ' . $error->getMessage());
