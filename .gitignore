@@ -5,3 +5,4 @@ config.local.php
 *.log
 .DS_Store
 Thumbs.db
+.tools/
