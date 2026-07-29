@@ -60,25 +60,29 @@ try {
     $areaName = '';
     $minDays = 3;
     $maxDays = 5;
-    $zoneCount = (int) ($database->query(
-        'SELECT COUNT(*) FROM delivery_pincodes WHERE active = 1'
-    )->fetch_row()[0] ?? 0);
-    if ($zoneCount > 0) {
-        $zoneStatement = $database->prepare(
+    $blockedStatement = $database->prepare(
+        'SELECT reason FROM delivery_blocked_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
+    );
+    $blockedStatement->bind_param('s', $pincode);
+    $blockedStatement->execute();
+    $blocked = $blockedStatement->get_result()->fetch_assoc();
+    $blockedStatement->close();
+    if ($blocked) {
+        pricingResponse(422, [
+            'status' => 'error',
+            'serviceable' => false,
+            'message' => 'Delivery is not currently available for this PIN code.',
+        ]);
+    }
+    $zoneStatement = $database->prepare(
             'SELECT area_name, delivery_fee, min_delivery_days, max_delivery_days
              FROM delivery_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
-        );
-        $zoneStatement->bind_param('s', $pincode);
-        $zoneStatement->execute();
-        $zone = $zoneStatement->get_result()->fetch_assoc();
-        $zoneStatement->close();
-        if (!$zone) {
-            pricingResponse(422, [
-                'status' => 'error',
-                'serviceable' => false,
-                'message' => 'Delivery is not currently available for this PIN code.',
-            ]);
-        }
+    );
+    $zoneStatement->bind_param('s', $pincode);
+    $zoneStatement->execute();
+    $zone = $zoneStatement->get_result()->fetch_assoc();
+    $zoneStatement->close();
+    if ($zone) {
         $areaName = (string) $zone['area_name'];
         $deliveryFee = (float) $zone['delivery_fee'];
         $minDays = (int) $zone['min_delivery_days'];

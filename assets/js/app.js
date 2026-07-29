@@ -48,7 +48,9 @@ const elements = {
   orderSuccessDialog: document.querySelector("#orderSuccessDialog"),
   successOrderId: document.querySelector("#successOrderId"),
   closeOrderSuccess: document.querySelector("#closeOrderSuccess"),
-  toast: document.querySelector("#toast")
+  toast: document.querySelector("#toast"),
+  comboSection: document.querySelector("#combos"),
+  comboGrid: document.querySelector("#comboGrid")
 };
 
 function loadCart() {
@@ -403,6 +405,67 @@ async function loadProducts() {
   }
 }
 
+async function loadCombos() {
+  if (!elements.comboSection || !elements.comboGrid) return;
+  try {
+    const response = await fetch("combos.php", { headers: { "Accept": "application/json" } });
+    const result = await response.json();
+    if (!response.ok || result.status !== "success" || !Array.isArray(result.combos)) {
+      throw new Error("Combo catalogue unavailable");
+    }
+    const combos = result.combos.filter(combo =>
+      combo.available && Array.isArray(combo.items) && combo.items.length >= 2
+      && combo.items.every(item => PRODUCTS[item.productId])
+    );
+    elements.comboGrid.replaceChildren();
+    combos.forEach(combo => {
+      const card = document.createElement("article");
+      card.className = "combo-card";
+
+      const eyebrow = document.createElement("p");
+      eyebrow.className = "combo-saving";
+      eyebrow.textContent = `Save ${money(Number(combo.discount) || 0)}`;
+      const title = document.createElement("h3");
+      title.textContent = combo.name;
+      const items = document.createElement("ul");
+      items.className = "combo-items";
+      combo.items.forEach(item => {
+        const line = document.createElement("li");
+        line.textContent = `${Number(item.quantity)} × ${item.name} (${item.variant})`;
+        items.append(line);
+      });
+      const footer = document.createElement("div");
+      footer.className = "combo-footer";
+      const price = document.createElement("div");
+      price.className = "combo-price";
+      const current = document.createElement("strong");
+      current.textContent = money(Number(combo.comboPrice));
+      const original = document.createElement("s");
+      original.textContent = money(Number(combo.originalPrice));
+      price.append(current, original);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Add full combo to cart";
+      button.addEventListener("click", () => {
+        combo.items.forEach(item => {
+          const quantity = Number(item.quantity) || 1;
+          cart[item.productId] = Math.min(20, (cart[item.productId] || 0) + quantity);
+        });
+        saveCart();
+        showToast(`${combo.name} added to your cart`);
+        openCart();
+      });
+      footer.append(price, button);
+      card.append(eyebrow, title, items, footer);
+      elements.comboGrid.append(card);
+    });
+    elements.comboSection.hidden = combos.length === 0;
+  } catch (error) {
+    console.warn(error.message);
+    elements.comboSection.hidden = true;
+  }
+}
+
 async function submitOrder(event) {
   event.preventDefault();
   elements.formMessage.hidden = true;
@@ -594,4 +657,7 @@ document.addEventListener("keydown", event => {
 
 document.querySelector("#currentYear").textContent = new Date().getFullYear();
 renderCart();
-loadProducts();
+(async () => {
+  await loadProducts();
+  await loadCombos();
+})();

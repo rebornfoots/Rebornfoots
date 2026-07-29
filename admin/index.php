@@ -242,11 +242,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manag
                     $statement->bind_param('ssdii', $pincode, $areaName, $deliveryFee, $minDays, $maxDays);
                     $statement->execute();
                     $statement->close();
-                    flash('success', "PIN code {$pincode} is now serviceable.");
+                    flash('success', "Delivery override saved for PIN code {$pincode}.");
                 }
             } catch (Throwable $error) {
                 error_log('InbornFoot pincode update error: ' . $error->getMessage());
                 flash('error', 'The serviceable PIN code could not be updated.');
+            }
+        }
+    }
+    header('Location: /admin/');
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manage_blocked_pincode') {
+    if (!validCsrf($_POST['csrf_token'] ?? null)) {
+        flash('error', 'Your session expired. Please try again.');
+    } else {
+        $pincode = preg_replace('/\D/', '', (string) ($_POST['pincode'] ?? '')) ?? '';
+        $mode = (string) ($_POST['mode'] ?? 'add');
+        $reason = trim((string) ($_POST['reason'] ?? ''));
+        if (!preg_match('/^[1-9]\d{5}$/', $pincode)
+            || !in_array($mode, ['add', 'delete'], true)
+            || mb_strlen($reason) > 150
+        ) {
+            flash('error', 'Enter a valid unsupported PIN code and a short reason.');
+        } else {
+            try {
+                if ($mode === 'delete') {
+                    $statement = database()->prepare('DELETE FROM delivery_blocked_pincodes WHERE pincode = ?');
+                    $statement->bind_param('s', $pincode);
+                    $statement->execute();
+                    $statement->close();
+                    flash('success', "PIN code {$pincode} is available for delivery again.");
+                } else {
+                    $statement = database()->prepare(
+                        'INSERT INTO delivery_blocked_pincodes (pincode, reason, active)
+                         VALUES (?, ?, 1)
+                         ON DUPLICATE KEY UPDATE reason = VALUES(reason), active = 1'
+                    );
+                    $statement->bind_param('ss', $pincode, $reason);
+                    $statement->execute();
+                    $statement->close();
+                    flash('success', "Delivery is now blocked for PIN code {$pincode}.");
+                }
+            } catch (Throwable $error) {
+                error_log('InbornFoot blocked pincode update error: ' . $error->getMessage());
+                flash('error', 'The unsupported PIN code could not be updated.');
             }
         }
     }
@@ -263,6 +304,7 @@ $offset = ($page - 1) * $perPage;
 $databaseError = '';
 $orders = [];
 $deliveryZones = [];
+$blockedZones = [];
 $orderHistory = [];
 $totalOrders = 0;
 $metrics = ['today_orders' => 0, 'pending_orders' => 0, 'month_sales' => 0, 'month_orders' => 0];
@@ -271,6 +313,9 @@ try {
     $deliveryZones = database()->query(
         'SELECT pincode, area_name, delivery_fee, min_delivery_days, max_delivery_days
          FROM delivery_pincodes WHERE active = 1 ORDER BY pincode'
+    )->fetch_all(MYSQLI_ASSOC);
+    $blockedZones = database()->query(
+        'SELECT pincode, reason FROM delivery_blocked_pincodes WHERE active = 1 ORDER BY pincode'
     )->fetch_all(MYSQLI_ASSOC);
     $metricsResult = database()->query(
         "SELECT
@@ -412,8 +457,8 @@ $currentQuery = http_build_query(array_filter([
     <section class="serviceability-panel">
       <div>
         <p class="eyebrow">Delivery coverage</p>
-        <h2>Serviceable PIN codes</h2>
-        <p><?= $deliveryZones === [] ? 'No restriction is active; checkout currently accepts every valid Indian PIN code.' : count($deliveryZones) . ' PIN code(s) currently accepted at checkout.' ?></p>
+        <h2>Delivery fee and timing overrides</h2>
+        <p>Every valid Indian PIN code is accepted by default with free delivery in 3–5 days. Add only special fee or timing rules here.</p>
       </div>
       <form method="post" action="/admin/" class="pincode-form">
         <input type="hidden" name="action" value="manage_pincode">
@@ -439,6 +484,36 @@ $currentQuery = http_build_query(array_filter([
                 <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
                 <input type="hidden" name="pincode" value="<?= h($zone['pincode']) ?>">
                 <button type="submit" aria-label="Remove PIN code <?= h($zone['pincode']) ?>">×</button>
+              </form>
+            </span>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+      <div class="serviceability-divider"></div>
+      <div>
+        <p class="eyebrow">Delivery exclusions</p>
+        <h2>Unsupported PIN codes</h2>
+        <p><?= $blockedZones === [] ? 'No PIN codes are blocked.' : count($blockedZones) . ' PIN code(s) are currently blocked at checkout.' ?></p>
+      </div>
+      <form method="post" action="/admin/" class="pincode-form">
+        <input type="hidden" name="action" value="manage_blocked_pincode">
+        <input type="hidden" name="mode" value="add">
+        <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+        <input name="pincode" inputmode="numeric" maxlength="6" pattern="[1-9][0-9]{5}" placeholder="Unsupported PIN code" required>
+        <input name="reason" maxlength="150" placeholder="Internal reason (optional)">
+        <button type="submit">Block delivery</button>
+      </form>
+      <?php if ($blockedZones !== []): ?>
+        <div class="pincode-list">
+          <?php foreach ($blockedZones as $zone): ?>
+            <span>
+              <?= h($zone['pincode']) ?><?= $zone['reason'] !== '' ? ' · ' . h($zone['reason']) : '' ?>
+              <form method="post" action="/admin/">
+                <input type="hidden" name="action" value="manage_blocked_pincode">
+                <input type="hidden" name="mode" value="delete">
+                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                <input type="hidden" name="pincode" value="<?= h($zone['pincode']) ?>">
+                <button type="submit" aria-label="Allow PIN code <?= h($zone['pincode']) ?>">×</button>
               </form>
             </span>
           <?php endforeach; ?>

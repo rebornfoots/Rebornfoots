@@ -100,6 +100,16 @@ nav a:hover { color: var(--leaf); }
 .add-button:disabled { color: var(--muted); background: #e8ebe8; cursor: not-allowed; }
 .contact-button { text-align: center; text-decoration: none; }
 .product-buy .contact-price { font-size: 15px; }
+.combo-section { padding: 70px 6vw; background: #edf5ef; }
+.combo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.combo-card { display: grid; gap: 16px; padding: 22px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 28px rgba(18,65,43,.06); }
+.combo-card h3 { margin: 5px 0 0; font-family: Georgia, serif; font-size: 25px; }
+.combo-items { display: grid; gap: 7px; margin: 0; padding: 0; color: var(--muted); list-style: none; font-size: 13px; }
+.combo-items li { display: flex; justify-content: space-between; gap: 10px; }
+.combo-price { display: flex; align-items: end; justify-content: space-between; gap: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.combo-price strong { display: block; color: var(--forest); font-size: 24px; }
+.combo-price s { color: var(--muted); font-size: 12px; }
+.combo-saving { display: inline-flex; width: fit-content; padding: 5px 9px; color: #176b39; background: #e4f7e9; border-radius: 999px; font-size: 11px; font-weight: 800; }
 
 .story { display: grid; grid-template-columns: 1fr 1fr; min-height: 650px; background: var(--forest); }
 .story-photo { position: relative; min-height: 520px; background: url("https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=1200&q=85") center/cover; }
@@ -192,6 +202,7 @@ footer > p { grid-column: 1 / -1; margin: 0; padding-top: 25px; border-top: 1px 
 .toast.show { opacity: 1; transform: none; }
 
 @media (max-width: 900px) {
+  .combo-grid { grid-template-columns: 1fr 1fr; }
   nav { display: none; }
   .hero { grid-template-columns: 1fr; }
   .hero-copy { padding: 70px 30px; }
@@ -203,6 +214,7 @@ footer > p { grid-column: 1 / -1; margin: 0; padding-top: 25px; border-top: 1px 
 }
 
 @media (max-width: 600px) {
+  .combo-grid { grid-template-columns: 1fr; }
   .announcement { font-size: 11px; }
   .nav-shell { width: calc(100% - 24px); min-height: 70px; }
   .brand img { width: 42px; height: 42px; }

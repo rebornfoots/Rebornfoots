@@ -34,18 +34,18 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 try {
     $database = new mysqli($host, $user, $password, $name);
     $database->set_charset('utf8mb4');
-    $zoneCount = (int) ($database->query(
-        'SELECT COUNT(*) FROM delivery_pincodes WHERE active = 1'
-    )->fetch_row()[0] ?? 0);
-
-    if ($zoneCount === 0) {
-        quoteResponse(200, [
-            'status' => 'success',
-            'serviceable' => true,
-            'areaName' => '',
-            'deliveryFee' => 0,
-            'minDays' => 3,
-            'maxDays' => 5,
+    $blockedStatement = $database->prepare(
+        'SELECT reason FROM delivery_blocked_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
+    );
+    $blockedStatement->bind_param('s', $pincode);
+    $blockedStatement->execute();
+    $blocked = $blockedStatement->get_result()->fetch_assoc();
+    $blockedStatement->close();
+    if ($blocked) {
+        quoteResponse(422, [
+            'status' => 'error',
+            'serviceable' => false,
+            'message' => 'Delivery is not currently available for this PIN code.',
         ]);
     }
 
@@ -57,21 +57,13 @@ try {
     $statement->execute();
     $zone = $statement->get_result()->fetch_assoc();
     $statement->close();
-    if (!$zone) {
-        quoteResponse(422, [
-            'status' => 'error',
-            'serviceable' => false,
-            'message' => 'Delivery is not currently available for this PIN code.',
-        ]);
-    }
-
     quoteResponse(200, [
         'status' => 'success',
         'serviceable' => true,
-        'areaName' => (string) $zone['area_name'],
-        'deliveryFee' => (float) $zone['delivery_fee'],
-        'minDays' => (int) $zone['min_delivery_days'],
-        'maxDays' => (int) $zone['max_delivery_days'],
+        'areaName' => (string) ($zone['area_name'] ?? ''),
+        'deliveryFee' => (float) ($zone['delivery_fee'] ?? 0),
+        'minDays' => (int) ($zone['min_delivery_days'] ?? 3),
+        'maxDays' => (int) ($zone['max_delivery_days'] ?? 5),
     ]);
 } catch (Throwable $error) {
     error_log('InbornFoot delivery quote error: ' . $error->getMessage());
