@@ -151,7 +151,7 @@ try {
     $productIds = array_keys($requestedItems);
     $placeholders = implode(',', array_fill(0, count($productIds), '?'));
     $catalogStatement = $database->prepare(
-        "SELECT id, name, variant, price
+        "SELECT id, name, variant, price, track_stock, stock_quantity
          FROM products
          WHERE id IN ({$placeholders}) AND active = 1 AND purchasable = 1 AND price IS NOT NULL"
     );
@@ -170,6 +170,12 @@ try {
     foreach ($catalogProducts as $product) {
         $productId = (string) $product['id'];
         $quantity = $requestedItems[$productId];
+        if ((bool) $product['track_stock'] && $quantity > (int) $product['stock_quantity']) {
+            respond(422, [
+                'status' => 'error',
+                'message' => $product['name'] . ' has only ' . (int) $product['stock_quantity'] . ' item(s) available.',
+            ]);
+        }
         $price = (float) $product['price'];
         $subtotal = $price * $quantity;
         $validatedItems[$productId] = [

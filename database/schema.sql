@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS orders (
     payment_method VARCHAR(20) NOT NULL DEFAULT 'UPI',
     order_details JSON NOT NULL,
     total DECIMAL(10, 2) UNSIGNED NOT NULL,
+    inventory_deducted TINYINT(1) NOT NULL DEFAULT 0,
     status ENUM('pending', 'confirmed', 'paid', 'packed', 'shipped', 'delivered', 'cancelled')
         NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -27,6 +28,9 @@ CREATE TABLE IF NOT EXISTS products (
     image_url VARCHAR(500) NOT NULL DEFAULT '',
     alt_text VARCHAR(250) NOT NULL DEFAULT '',
     purchasable TINYINT(1) NOT NULL DEFAULT 0,
+    track_stock TINYINT(1) NOT NULL DEFAULT 0,
+    stock_quantity INT UNSIGNED NOT NULL DEFAULT 0,
+    low_stock_threshold SMALLINT UNSIGNED NOT NULL DEFAULT 5,
     active TINYINT(1) NOT NULL DEFAULT 1,
     sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

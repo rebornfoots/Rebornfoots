@@ -138,3 +138,90 @@ function statusLabel(string $status): string
 {
     return ucfirst($status);
 }
+
+function updateOrderStatusWithInventory(int $orderId, string $newStatus): bool
+{
+    $database = database();
+    $stockStatuses = ['confirmed', 'paid', 'packed', 'shipped', 'delivered'];
+    $database->begin_transaction();
+
+    try {
+        $orderStatement = $database->prepare(
+            'SELECT order_details, inventory_deducted FROM orders WHERE id = ? FOR UPDATE'
+        );
+        $orderStatement->bind_param('i', $orderId);
+        $orderStatement->execute();
+        $order = $orderStatement->get_result()->fetch_assoc();
+        $orderStatement->close();
+        if (!$order) {
+            throw new DomainException('The order no longer exists.');
+        }
+
+        $inventoryDeducted = (bool) $order['inventory_deducted'];
+        $items = normalizedOrderItems((string) $order['order_details']);
+
+        if (in_array($newStatus, $stockStatuses, true) && !$inventoryDeducted) {
+            foreach ($items as $item) {
+                $productId = (string) ($item['productId'] ?? '');
+                $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_INT);
+                if ($productId === '' || $quantity === false || $quantity < 1) {
+                    continue; // Legacy orders did not store product IDs.
+                }
+
+                $productStatement = $database->prepare(
+                    'SELECT name, track_stock, stock_quantity FROM products WHERE id = ? FOR UPDATE'
+                );
+                $productStatement->bind_param('s', $productId);
+                $productStatement->execute();
+                $product = $productStatement->get_result()->fetch_assoc();
+                $productStatement->close();
+                if (!$product) {
+                    throw new DomainException("Product {$productId} no longer exists.");
+                }
+                if ((bool) $product['track_stock']) {
+                    if ((int) $product['stock_quantity'] < $quantity) {
+                        throw new DomainException(
+                            'Not enough stock for ' . $product['name'] . '. Available: ' . (int) $product['stock_quantity'] . '.'
+                        );
+                    }
+                    $stockStatement = $database->prepare(
+                        'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?'
+                    );
+                    $stockStatement->bind_param('is', $quantity, $productId);
+                    $stockStatement->execute();
+                    $stockStatement->close();
+                }
+            }
+            $inventoryDeducted = true;
+        } elseif ($newStatus === 'cancelled' && $inventoryDeducted) {
+            foreach ($items as $item) {
+                $productId = (string) ($item['productId'] ?? '');
+                $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_INT);
+                if ($productId === '' || $quantity === false || $quantity < 1) {
+                    continue;
+                }
+                $stockStatement = $database->prepare(
+                    'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ? AND track_stock = 1'
+                );
+                $stockStatement->bind_param('is', $quantity, $productId);
+                $stockStatement->execute();
+                $stockStatement->close();
+            }
+            $inventoryDeducted = false;
+        }
+
+        $deductedValue = $inventoryDeducted ? 1 : 0;
+        $updateStatement = $database->prepare(
+            'UPDATE orders SET status = ?, inventory_deducted = ? WHERE id = ?'
+        );
+        $updateStatement->bind_param('sii', $newStatus, $deductedValue, $orderId);
+        $updateStatement->execute();
+        $changed = $updateStatement->affected_rows > 0;
+        $updateStatement->close();
+        $database->commit();
+        return $changed;
+    } catch (Throwable $error) {
+        $database->rollback();
+        throw $error;
+    }
+}

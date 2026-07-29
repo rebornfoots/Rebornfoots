@@ -186,6 +186,12 @@ function productCard(product) {
     badge.textContent = product.badge;
     image.append(badge);
   }
+  if (product.lowStock) {
+    const stockBadge = document.createElement("span");
+    stockBadge.className = "product-stock-badge";
+    stockBadge.textContent = "Only a few left";
+    image.append(stockBadge);
+  }
 
   const content = document.createElement("div");
   content.className = "product-content";
@@ -221,7 +227,16 @@ function productCard(product) {
   const variant = document.createElement("small");
   variant.textContent = product.variant;
 
-  if (product.purchasable && product.price !== null) {
+  if (product.inStock === false && product.price !== null) {
+    price.textContent = money(product.price);
+    const button = document.createElement("button");
+    button.className = "add-button";
+    button.type = "button";
+    button.textContent = "Out of stock";
+    button.disabled = true;
+    pricing.append(price, variant);
+    buy.append(pricing, button);
+  } else if (product.purchasable && product.price !== null) {
     price.textContent = money(product.price);
     const button = document.createElement("button");
     button.className = "add-button";

@@ -29,7 +29,7 @@ try {
     $database->set_charset('utf8mb4');
     $result = $database->query(
         'SELECT id, slug, name, category, description, price, variant, badge, benefits,
-                image_url, alt_text, purchasable
+                image_url, alt_text, purchasable, track_stock, stock_quantity, low_stock_threshold
          FROM products
          WHERE active = 1
          ORDER BY sort_order, name'
@@ -46,6 +46,7 @@ try {
                 $benefits = [];
             }
         }
+        $inStock = !(bool) $product['track_stock'] || (int) $product['stock_quantity'] > 0;
         $products[] = [
             'id' => (string) $product['id'],
             'slug' => (string) $product['slug'],
@@ -58,7 +59,13 @@ try {
             'benefits' => $benefits,
             'imageUrl' => (string) $product['image_url'],
             'altText' => (string) $product['alt_text'],
-            'purchasable' => (bool) $product['purchasable'],
+            'purchasable' => (bool) $product['purchasable'] && $inStock,
+            'inStock' => $inStock,
+            'trackStock' => (bool) $product['track_stock'],
+            'stockQuantity' => (bool) $product['track_stock'] ? (int) $product['stock_quantity'] : null,
+            'lowStock' => (bool) $product['track_stock']
+                && (int) $product['stock_quantity'] > 0
+                && (int) $product['stock_quantity'] <= (int) $product['low_stock_threshold'],
         ];
     }
     $database->close();

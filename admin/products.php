@@ -19,7 +19,49 @@ function validProductImage(string $value): bool
         return true;
     }
     return filter_var($value, FILTER_VALIDATE_URL) !== false
-        && str_starts_with(strtolower($value), 'https://');
+        && strtolower((string) parse_url($value, PHP_URL_SCHEME)) === 'https'
+        && strtolower((string) parse_url($value, PHP_URL_HOST)) === 'images.unsplash.com';
+}
+
+function uploadedProductImage(array $file): ?string
+{
+    $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($error === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+    if ($error !== UPLOAD_ERR_OK || !isset($file['tmp_name'], $file['size'])) {
+        throw new RuntimeException('The image upload failed.');
+    }
+    if ((int) $file['size'] < 1 || (int) $file['size'] > 5 * 1024 * 1024) {
+        throw new RuntimeException('Product images must be smaller than 5 MB.');
+    }
+
+    $mimeInfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime = $mimeInfo ? finfo_file($mimeInfo, (string) $file['tmp_name']) : false;
+    if ($mimeInfo) {
+        finfo_close($mimeInfo);
+    }
+    $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+    if (!is_string($mime) || !isset($extensions[$mime])) {
+        throw new RuntimeException('Upload a JPEG, PNG or WebP image.');
+    }
+
+    $dimensions = @getimagesize((string) $file['tmp_name']);
+    if (!is_array($dimensions) || $dimensions[0] < 300 || $dimensions[1] < 300
+        || $dimensions[0] > 8000 || $dimensions[1] > 8000
+    ) {
+        throw new RuntimeException('Images must be between 300 and 8000 pixels on each side.');
+    }
+
+    $directory = dirname(__DIR__) . '/assets/images/products';
+    if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+        throw new RuntimeException('The product image directory is unavailable.');
+    }
+    $filename = 'product-' . bin2hex(random_bytes(12)) . '.' . $extensions[$mime];
+    if (!move_uploaded_file((string) $file['tmp_name'], $directory . '/' . $filename)) {
+        throw new RuntimeException('The image could not be saved.');
+    }
+    return 'assets/images/products/' . $filename;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -63,6 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $imageUrl = trim((string) ($_POST['image_url'] ?? ''));
         $altText = productText($_POST['alt_text'] ?? '', 250);
         $purchasable = isset($_POST['purchasable']) ? 1 : 0;
+        $trackStock = isset($_POST['track_stock']) ? 1 : 0;
+        $stockQuantity = max(0, min(4294967295, (int) ($_POST['stock_quantity'] ?? 0)));
+        $lowStockThreshold = max(0, min(65535, (int) ($_POST['low_stock_threshold'] ?? 5)));
         $active = isset($_POST['active']) ? 1 : 0;
         $sortOrder = max(0, min(65535, (int) ($_POST['sort_order'] ?? 0)));
         $priceInput = trim((string) ($_POST['price'] ?? ''));
@@ -93,10 +138,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Purchasable products require a price.';
         }
         if (!validProductImage($imageUrl)) {
-            $errors[] = 'Use a local assets/images path or a secure HTTPS image URL.';
+            $errors[] = 'Upload an image, use a local assets/images path, or use an images.unsplash.com URL.';
         }
         if ($originalId !== '' && $originalId !== $id) {
             $errors[] = 'Product IDs cannot be changed after creation.';
+        }
+
+        try {
+            $uploadedImage = uploadedProductImage($_FILES['product_image'] ?? []);
+            if ($uploadedImage !== null) {
+                $imageUrl = $uploadedImage;
+            }
+        } catch (RuntimeException $error) {
+            $errors[] = $error->getMessage();
         }
 
         if ($errors !== []) {
@@ -111,24 +165,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statement = database()->prepare(
                     'INSERT INTO products
                      (id, slug, name, category, description, price, variant, badge, benefits, image_url,
-                      alt_text, purchasable, active, sort_order)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                      alt_text, purchasable, track_stock, stock_quantity, low_stock_threshold, active, sort_order)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
                 );
                 $statement->bind_param(
-                    'sssssdsssssiii',
+                    'sssssdsssssiiiiii',
                     $id, $slug, $name, $category, $description, $price, $variant, $badge,
-                    $benefits, $imageUrl, $altText, $purchasable, $active, $sortOrder
+                    $benefits, $imageUrl, $altText, $purchasable, $trackStock, $stockQuantity,
+                    $lowStockThreshold, $active, $sortOrder
                 );
             } else {
                 $statement = database()->prepare(
                     'UPDATE products SET slug = ?, name = ?, category = ?, description = ?, price = ?,
                      variant = ?, badge = ?, benefits = ?, image_url = ?, alt_text = ?,
-                     purchasable = ?, active = ?, sort_order = ? WHERE id = ?'
+                     purchasable = ?, track_stock = ?, stock_quantity = ?, low_stock_threshold = ?,
+                     active = ?, sort_order = ? WHERE id = ?'
                 );
                 $statement->bind_param(
-                    'ssssdsssssiiis',
+                    'ssssdsssssiiiiiis',
                     $slug, $name, $category, $description, $price, $variant, $badge, $benefits,
-                    $imageUrl, $altText, $purchasable, $active, $sortOrder, $id
+                    $imageUrl, $altText, $purchasable, $trackStock, $stockQuantity,
+                    $lowStockThreshold, $active, $sortOrder, $id
                 );
             }
             $statement->execute();
@@ -151,7 +208,8 @@ $products = [];
 try {
     $products = database()->query(
         'SELECT id, slug, name, category, description, price, variant, badge, benefits,
-                image_url, alt_text, purchasable, active, sort_order, updated_at
+                image_url, alt_text, purchasable, track_stock, stock_quantity, low_stock_threshold,
+                active, sort_order, updated_at
          FROM products ORDER BY sort_order, name'
     )->fetch_all(MYSQLI_ASSOC);
 } catch (Throwable $error) {
@@ -182,6 +240,9 @@ $form = $_SESSION['product_form'] ?? $editing ?? [
     'image_url' => '',
     'alt_text' => '',
     'purchasable' => 0,
+    'track_stock' => 0,
+    'stock_quantity' => 0,
+    'low_stock_threshold' => 5,
     'active' => 1,
     'sort_order' => count($products) * 10 + 10,
 ];
@@ -199,6 +260,11 @@ $showForm = $editId !== '';
 $flash = takeFlash();
 $activeCount = count(array_filter($products, static fn (array $product): bool => (bool) $product['active']));
 $purchasableCount = count(array_filter($products, static fn (array $product): bool => (bool) $product['purchasable']));
+$lowStockCount = count(array_filter(
+    $products,
+    static fn (array $product): bool => (bool) $product['track_stock']
+        && (int) $product['stock_quantity'] <= (int) $product['low_stock_threshold']
+));
 ?>
 <!doctype html>
 <html lang="en">
@@ -238,6 +304,7 @@ $purchasableCount = count(array_filter($products, static fn (array $product): bo
       <article><span>Total products</span><strong><?= count($products) ?></strong></article>
       <article><span>Published</span><strong><?= $activeCount ?></strong></article>
       <article><span>Online checkout</span><strong><?= $purchasableCount ?></strong></article>
+      <article><span>Low / out of stock</span><strong><?= $lowStockCount ?></strong></article>
     </section>
 
     <?php if ($showForm): ?>
@@ -246,7 +313,7 @@ $purchasableCount = count(array_filter($products, static fn (array $product): bo
           <div><p class="eyebrow"><?= $editing ? 'Edit product' : 'New product' ?></p><h2><?= h($editing['name'] ?? 'Create a product') ?></h2></div>
           <a href="/admin/products.php">Close ×</a>
         </div>
-        <form method="post" action="/admin/products.php" class="product-form">
+        <form method="post" action="/admin/products.php" class="product-form" enctype="multipart/form-data">
           <input type="hidden" name="action" value="save">
           <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
           <input type="hidden" name="original_id" value="<?= h($editing['id'] ?? '') ?>">
@@ -261,11 +328,15 @@ $purchasableCount = count(array_filter($products, static fn (array $product): bo
           <label><span>Display order</span><input name="sort_order" type="number" min="0" max="65535" value="<?= h($form['sort_order'] ?? 0) ?>"></label>
           <label class="wide"><span>Benefits</span><input name="benefits" value="<?= h($form['benefits'] ?? '') ?>" placeholder="Cold pressed, Chemical free, Traditional flavour"><small>Separate benefits with commas</small></label>
           <label class="wide"><span>Image path or HTTPS URL</span><input name="image_url" value="<?= h($form['image_url'] ?? '') ?>" maxlength="500" placeholder="assets/images/products/product.jpg"></label>
+          <label class="wide"><span>Upload product image</span><input name="product_image" type="file" accept="image/jpeg,image/png,image/webp"><small>JPEG, PNG or WebP · maximum 5 MB · minimum 300 × 300 px</small></label>
           <label class="wide"><span>Image description</span><input name="alt_text" value="<?= h($form['alt_text'] ?? '') ?>" maxlength="250"></label>
           <div class="product-checks wide">
             <label><input type="checkbox" name="purchasable" value="1" <?= !empty($form['purchasable']) ? 'checked' : '' ?>><span>Available for online checkout</span></label>
+            <label><input type="checkbox" name="track_stock" value="1" <?= !empty($form['track_stock']) ? 'checked' : '' ?>><span>Track available stock</span></label>
             <label><input type="checkbox" name="active" value="1" <?= !isset($form['active']) || !empty($form['active']) ? 'checked' : '' ?>><span>Published on storefront</span></label>
           </div>
+          <label><span>Stock quantity</span><input name="stock_quantity" type="number" min="0" max="4294967295" value="<?= h($form['stock_quantity'] ?? 0) ?>"></label>
+          <label><span>Low-stock warning at</span><input name="low_stock_threshold" type="number" min="0" max="65535" value="<?= h($form['low_stock_threshold'] ?? 5) ?>"></label>
           <div class="form-actions wide"><button class="primary-button" type="submit">Save product</button><a href="/admin/products.php">Cancel</a></div>
         </form>
       </section>
@@ -286,7 +357,11 @@ $purchasableCount = count(array_filter($products, static fn (array $product): bo
             <div class="admin-product-copy">
               <div><span><?= h($product['category']) ?></span><span><?= $product['active'] ? 'Published' : 'Hidden' ?></span></div>
               <h2><?= h($product['name']) ?></h2>
-              <p><?= h($product['variant']) ?> · <?= $product['price'] === null ? 'Contact for price' : '₹' . number_format((float) $product['price'], 0) ?></p>
+              <p>
+                <?= h($product['variant']) ?> ·
+                <?= $product['price'] === null ? 'Contact for price' : '₹' . number_format((float) $product['price'], 0) ?>
+                · <?= $product['track_stock'] ? number_format((int) $product['stock_quantity']) . ' in stock' : 'Stock not tracked' ?>
+              </p>
             </div>
             <div class="admin-product-actions">
               <a href="/admin/products.php?edit=<?= rawurlencode((string) $product['id']) ?>">Edit</a>

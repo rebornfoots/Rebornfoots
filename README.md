@@ -74,6 +74,19 @@ keeps its built-in HTML catalogue as a resilient fallback if the API is unavaila
 Checkout never trusts browser prices: it reloads current price, availability and
 purchase eligibility from MySQL before creating every order.
 
+Run `database/migrate_inventory.sql` once after the product migration to enable:
+
+- Secure JPEG, PNG and WebP uploads up to 5 MB
+- Optional stock tracking per product or pack-size variant
+- Low-stock and out-of-stock storefront states
+- Checkout quantity validation against current stock
+- Transaction-safe stock deduction when an order is confirmed
+- Automatic stock restoration when a deducted order is cancelled
+
+Stock tracking is off by default. Enable it only after entering a verified available
+quantity. Different pack sizes should be created as separate product records with
+unique IDs so each variant has an independent price and stock count.
+
 ## Order security
 
 - The browser submits only product IDs and quantities.

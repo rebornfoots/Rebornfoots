@@ -114,16 +114,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             flash('error', 'Invalid order status request.');
         } else {
             try {
-                $statement = database()->prepare('UPDATE orders SET status = ? WHERE id = ?');
-                $statement->bind_param('si', $newStatus, $orderId);
-                $statement->execute();
+                $changed = updateOrderStatusWithInventory($orderId, $newStatus);
                 flash(
-                    $statement->affected_rows > 0 ? 'success' : 'info',
-                    $statement->affected_rows > 0
+                    $changed ? 'success' : 'info',
+                    $changed
                         ? "Order #{$orderId} updated to " . statusLabel($newStatus) . '.'
                         : "Order #{$orderId} was already " . statusLabel($newStatus) . '.'
                 );
-                $statement->close();
+            } catch (DomainException $error) {
+                flash('error', $error->getMessage());
             } catch (Throwable $error) {
                 error_log('InbornFoot admin update error: ' . $error->getMessage());
                 flash('error', 'The order could not be updated.');
