@@ -42,7 +42,7 @@ function loadCart() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
     return Object.fromEntries(
       Object.entries(saved).filter(([id, quantity]) =>
-        PRODUCTS[id] && Number.isInteger(quantity) && quantity > 0 && quantity <= 20
+        /^[a-z0-9-]{2,64}$/.test(id) && Number.isInteger(quantity) && quantity > 0 && quantity <= 20
       )
     );
   } catch {

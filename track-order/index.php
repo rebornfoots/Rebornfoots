@@ -151,6 +151,16 @@ foreach ($history as $event) {
         $historyByStatus[$eventStatus] = (string) $event['created_at'];
     }
 }
+$reorderItems = $order
+    ? array_values(array_filter(
+        trackingItems((string) $order['order_details']),
+        static fn (array $item): bool => isset($item['productId'], $item['quantity'])
+            && is_string($item['productId'])
+            && preg_match('/^[a-z0-9-]{2,64}$/', $item['productId']) === 1
+            && filter_var($item['quantity'], FILTER_VALIDATE_INT) !== false
+            && (int) $item['quantity'] > 0
+    ))
+    : [];
 ?>
 <!doctype html>
 <html lang="en">
@@ -206,6 +216,9 @@ foreach ($history as $event) {
           <div class="result-actions">
             <span class="status status-<?= escape($order['status']) ?>"><?= escape(ucfirst((string) $order['status'])) ?></span>
             <button class="print-receipt" type="button" data-print-receipt>Print receipt</button>
+            <?php if ($reorderItems !== []): ?>
+              <button class="buy-again" type="button" data-buy-again>Buy again</button>
+            <?php endif; ?>
           </div>
         </div>
 
@@ -248,6 +261,12 @@ foreach ($history as $event) {
           </aside>
         </div>
       </section>
+      <?php if ($reorderItems !== []): ?>
+        <script id="reorder-items" type="application/json"><?= json_encode(
+            $reorderItems,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+        ) ?></script>
+      <?php endif; ?>
     <?php endif; ?>
 
     <section class="help-band">

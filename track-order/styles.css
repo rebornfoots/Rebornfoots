@@ -45,8 +45,10 @@ h1, h2 { font-family: Georgia, serif; letter-spacing: -.03em; }
 .result-actions { display: flex; align-items: flex-end; flex-direction: column; gap: 10px; }
 .status { padding: 7px 12px; color: #176b39; background: #e5f6ea; border-radius: 999px; font-size: 11px; font-weight: 850; text-transform: uppercase; }
 .status-cancelled { color: #8a1c13; background: #ffebe9; }
-.print-receipt { padding: 8px 12px; color: var(--forest); background: #fff; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; font-size: 11px; font-weight: 800; }
-.print-receipt:hover { background: #edf5ef; border-color: #b8cbbd; }
+.print-receipt, .buy-again { padding: 8px 12px; color: var(--forest); background: #fff; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; font-size: 11px; font-weight: 800; }
+.print-receipt:hover, .buy-again:hover { background: #edf5ef; border-color: #b8cbbd; }
+.buy-again { color: #fff; background: var(--forest); border-color: var(--forest); }
+.buy-again:disabled { cursor: wait; opacity: .7; }
 .timeline { display: grid; grid-template-columns: repeat(6, 1fr); margin: 0; padding: 34px; list-style: none; }
 .timeline li { position: relative; text-align: center; }
 .timeline li::before { position: absolute; z-index: 0; top: 17px; right: 50%; left: -50%; height: 2px; content: ""; background: var(--line); }
@@ -109,7 +111,7 @@ footer { padding: 25px; color: var(--muted); text-align: center; font-size: 10px
 @media print {
   @page { size: A4; margin: 16mm; }
   body { color: #111; background: #fff; }
-  .tracking-header, .lookup-panel, .help-band, footer, .print-receipt { display: none !important; }
+  .tracking-header, .lookup-panel, .help-band, footer, .print-receipt, .buy-again, #reorder-items { display: none !important; }
   main { width: 100%; margin: 0; padding: 0; }
   .result-panel { overflow: visible; margin: 0; border: 1px solid #bbb; border-radius: 0; box-shadow: none; }
   .result-panel::before { display: block; padding: 22px 28px 0; color: #174f35; content: "InbornFoot • Order receipt"; font: 700 20px Georgia, serif; }
