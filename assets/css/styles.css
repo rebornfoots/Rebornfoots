@@ -71,7 +71,7 @@ nav a:hover { color: var(--leaf); }
 .product-card:nth-child(4), .product-card:nth-child(5) { grid-column: span 3; }
 .product-card:hover { box-shadow: var(--shadow); transform: translateY(-5px); }
 .product-image { position: relative; height: 265px; background-color: #e8e2d3; background-position: center; background-size: cover; }
-.product-image--jaggery { background-image: url("https://images.unsplash.com/photo-1605196560547-1f2b2a9de01a?auto=format&fit=crop&w=900&q=80"); }
+.product-image--jaggery { background-image: url("../images/products/pure-palm-jaggery.jpg"); }
 .product-image--butter { background-image: url("https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?auto=format&fit=crop&w=900&q=80"); }
 .product-image--white-butter { background-image: url("https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?auto=format&fit=crop&w=900&q=80"); }
 .product-image--ghee { background-image: url("https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=900&q=80"); }
