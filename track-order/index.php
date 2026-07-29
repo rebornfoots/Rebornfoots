@@ -109,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $database = new mysqli($host, $user, $password, $name);
                 $database->set_charset('utf8mb4');
                 $statement = $database->prepare(
-                    'SELECT id, customer_name, payment_method, order_details, total, status,
+                    'SELECT id, customer_name, payment_method, order_details, total, status, postal_code,
                             courier_name, tracking_number, tracking_url, estimated_delivery_date,
                             created_at, updated_at
                      FROM orders WHERE id = ? AND phone = ? LIMIT 1'
@@ -272,6 +272,7 @@ $reorderItems = $order
           <aside>
             <div><span>Order total</span><strong>₹<?= number_format((float) $order['total'], 0) ?></strong></div>
             <div><span>Payment</span><strong><?= escape($order['payment_method']) ?></strong></div>
+            <?php if ($order['postal_code'] !== null): ?><div><span>Delivery PIN</span><strong><?= escape($order['postal_code']) ?></strong></div><?php endif; ?>
             <div><span>Last updated</span><strong><?= escape(date('d M Y, g:i A', strtotime((string) $order['updated_at']))) ?></strong></div>
           </aside>
         </div>

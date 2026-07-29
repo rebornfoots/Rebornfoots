@@ -168,6 +168,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manage_pincode') {
+    if (!validCsrf($_POST['csrf_token'] ?? null)) {
+        flash('error', 'Your session expired. Please try again.');
+    } else {
+        $pincode = preg_replace('/\D/', '', (string) ($_POST['pincode'] ?? '')) ?? '';
+        $mode = (string) ($_POST['mode'] ?? 'add');
+        $areaName = trim((string) ($_POST['area_name'] ?? ''));
+        if (!preg_match('/^[1-9]\d{5}$/', $pincode) || mb_strlen($areaName) > 100 || !in_array($mode, ['add', 'delete'], true)) {
+            flash('error', 'Enter a valid 6-digit PIN code.');
+        } else {
+            try {
+                if ($mode === 'delete') {
+                    $statement = database()->prepare('DELETE FROM delivery_pincodes WHERE pincode = ?');
+                    $statement->bind_param('s', $pincode);
+                    $statement->execute();
+                    $statement->close();
+                    flash('success', "PIN code {$pincode} removed.");
+                } else {
+                    $statement = database()->prepare(
+                        'INSERT INTO delivery_pincodes (pincode, area_name, active) VALUES (?, ?, 1)
+                         ON DUPLICATE KEY UPDATE area_name = VALUES(area_name), active = 1'
+                    );
+                    $statement->bind_param('ss', $pincode, $areaName);
+                    $statement->execute();
+                    $statement->close();
+                    flash('success', "PIN code {$pincode} is now serviceable.");
+                }
+            } catch (Throwable $error) {
+                error_log('InbornFoot pincode update error: ' . $error->getMessage());
+                flash('error', 'The serviceable PIN code could not be updated.');
+            }
+        }
+    }
+    header('Location: /admin/');
+    exit;
+}
+
 $search = trim((string) ($_GET['q'] ?? ''));
 $status = (string) ($_GET['status'] ?? '');
 $status = in_array($status, ADMIN_STATUSES, true) ? $status : '';
@@ -176,11 +213,15 @@ $perPage = 20;
 $offset = ($page - 1) * $perPage;
 $databaseError = '';
 $orders = [];
+$deliveryZones = [];
 $orderHistory = [];
 $totalOrders = 0;
 $metrics = ['today_orders' => 0, 'pending_orders' => 0, 'month_sales' => 0, 'month_orders' => 0];
 
 try {
+    $deliveryZones = database()->query(
+        'SELECT pincode, area_name FROM delivery_pincodes WHERE active = 1 ORDER BY pincode'
+    )->fetch_all(MYSQLI_ASSOC);
     $metricsResult = database()->query(
         "SELECT
             SUM(created_at >= CURDATE()) AS today_orders,
@@ -222,7 +263,7 @@ try {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $query = 'SELECT id, customer_name, phone, address, payment_method, order_details, total, status,
+    $query = 'SELECT id, customer_name, phone, address, postal_code, payment_method, order_details, total, status,
                      courier_name, tracking_number, tracking_url, estimated_delivery_date, created_at, updated_at
               FROM orders' . $where . ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
     $queryStatement = database()->prepare($query);
@@ -310,6 +351,37 @@ $trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-ord
       <article><span>Monthly orders</span><strong><?= number_format((int) $metrics['month_orders']) ?></strong><small>Active orders</small></article>
     </section>
 
+    <section class="serviceability-panel">
+      <div>
+        <p class="eyebrow">Delivery coverage</p>
+        <h2>Serviceable PIN codes</h2>
+        <p><?= $deliveryZones === [] ? 'No restriction is active; checkout currently accepts every valid Indian PIN code.' : count($deliveryZones) . ' PIN code(s) currently accepted at checkout.' ?></p>
+      </div>
+      <form method="post" action="/admin/" class="pincode-form">
+        <input type="hidden" name="action" value="manage_pincode">
+        <input type="hidden" name="mode" value="add">
+        <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+        <input name="pincode" inputmode="numeric" maxlength="6" pattern="[1-9][0-9]{5}" placeholder="PIN code" required>
+        <input name="area_name" maxlength="100" placeholder="Area name (optional)">
+        <button type="submit">Add coverage</button>
+      </form>
+      <?php if ($deliveryZones !== []): ?>
+        <div class="pincode-list">
+          <?php foreach ($deliveryZones as $zone): ?>
+            <span><?= h($zone['pincode']) ?><?= $zone['area_name'] !== '' ? ' · ' . h($zone['area_name']) : '' ?>
+              <form method="post" action="/admin/">
+                <input type="hidden" name="action" value="manage_pincode">
+                <input type="hidden" name="mode" value="delete">
+                <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                <input type="hidden" name="pincode" value="<?= h($zone['pincode']) ?>">
+                <button type="submit" aria-label="Remove PIN code <?= h($zone['pincode']) ?>">×</button>
+              </form>
+            </span>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    </section>
+
     <section class="orders-panel">
       <form class="filters" method="get" action="/admin/">
         <label class="search-field">
@@ -350,6 +422,7 @@ $trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-ord
                     <div class="order-detail">
                       <strong>Delivery address</strong>
                       <p><?= nl2br(h($order['address'])) ?></p>
+                      <?php if ($order['postal_code'] !== null): ?><strong>PIN code</strong><p><?= h($order['postal_code']) ?></p><?php endif; ?>
                       <strong>Payment</strong>
                       <p><?= h($order['payment_method']) ?></p>
                       <strong>Last updated</strong>

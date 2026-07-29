@@ -89,6 +89,7 @@ $name = cleanText($request['name'] ?? '');
 $requestId = strtolower((string) ($request['requestId'] ?? ''));
 $phone = preg_replace('/\D/', '', (string) ($request['phone'] ?? '')) ?? '';
 $address = cleanText($request['address'] ?? '');
+$pincode = preg_replace('/\D/', '', (string) ($request['pincode'] ?? '')) ?? '';
 $payment = (string) ($request['payment'] ?? '');
 $items = $request['items'] ?? null;
 
@@ -104,6 +105,9 @@ if (!preg_match('/^[6-9]\d{9}$/', $phone)) {
 }
 if (mb_strlen($address) < 10 || mb_strlen($address) > 500) {
     $errors[] = 'Enter a complete delivery address.';
+}
+if (!preg_match('/^[1-9]\d{5}$/', $pincode)) {
+    $errors[] = 'Enter a valid 6-digit delivery PIN code.';
 }
 if ($payment !== 'UPI') {
     $errors[] = 'Select a supported payment method.';
@@ -173,6 +177,25 @@ try {
         ]);
     }
 
+    $zoneCount = (int) ($database->query(
+        'SELECT COUNT(*) FROM delivery_pincodes WHERE active = 1'
+    )->fetch_row()[0] ?? 0);
+    if ($zoneCount > 0) {
+        $zoneStatement = $database->prepare(
+            'SELECT pincode FROM delivery_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
+        );
+        $zoneStatement->bind_param('s', $pincode);
+        $zoneStatement->execute();
+        $serviceable = $zoneStatement->get_result()->fetch_assoc() !== null;
+        $zoneStatement->close();
+        if (!$serviceable) {
+            respond(422, [
+                'status' => 'error',
+                'message' => 'Delivery is not currently available for this PIN code.',
+            ]);
+        }
+    }
+
     // Product identity, availability and prices always come from MySQL.
     $productIds = array_keys($requestedItems);
     $placeholders = implode(',', array_fill(0, count($productIds), '?'));
@@ -219,10 +242,10 @@ try {
     $transactionStarted = true;
     $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     $statement = $database->prepare(
-        'INSERT INTO orders (request_key, customer_name, phone, address, payment_method, order_details, total)
-         VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO orders (request_key, customer_name, phone, address, postal_code, payment_method, order_details, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    $statement->bind_param('ssssssd', $requestId, $name, $phone, $address, $payment, $orderDetails, $total);
+    $statement->bind_param('sssssssd', $requestId, $name, $phone, $address, $pincode, $payment, $orderDetails, $total);
     $statement->execute();
     $orderId = $database->insert_id;
     $statement->close();

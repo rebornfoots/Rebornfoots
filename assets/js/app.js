@@ -318,6 +318,7 @@ async function submitOrder(event) {
     name: formData.get("name").trim(),
     phone: formData.get("phone").trim(),
     address: formData.get("address").trim(),
+    pincode: formData.get("pincode").trim(),
     payment: "UPI",
     items: Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }))
   };

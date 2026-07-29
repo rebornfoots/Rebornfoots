@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_name VARCHAR(100) NOT NULL,
     phone VARCHAR(15) NOT NULL,
     address VARCHAR(500) NOT NULL,
+    postal_code CHAR(6) NOT NULL,
     payment_method VARCHAR(20) NOT NULL DEFAULT 'UPI',
     order_details JSON NOT NULL,
     total DECIMAL(10, 2) UNSIGNED NOT NULL,
@@ -19,6 +20,13 @@ CREATE TABLE IF NOT EXISTS orders (
     UNIQUE INDEX idx_orders_request_key (request_key),
     INDEX idx_orders_phone (phone),
     INDEX idx_orders_status_created (status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS delivery_pincodes (
+    pincode CHAR(6) PRIMARY KEY,
+    area_name VARCHAR(100) NOT NULL DEFAULT '',
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS products (

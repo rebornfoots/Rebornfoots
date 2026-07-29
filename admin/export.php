@@ -39,7 +39,8 @@ function csvSafe(mixed $value): string
 
 try {
     $statement = database()->prepare(
-        'SELECT id, customer_name, phone, address, payment_method, order_details, total, status, created_at, updated_at
+        'SELECT id, customer_name, phone, address, postal_code, payment_method, order_details, total, status,
+                courier_name, tracking_number, estimated_delivery_date, created_at, updated_at
          FROM orders' . $where . ' ORDER BY created_at DESC, id DESC LIMIT 10000'
     );
     if ($types !== '') {
@@ -52,7 +53,7 @@ try {
     header('Content-Disposition: attachment; filename="inbornfoot-orders-' . date('Y-m-d-His') . '.csv"');
     echo "\xEF\xBB\xBF";
     $output = fopen('php://output', 'wb');
-    fputcsv($output, ['Order ID', 'Customer', 'Phone', 'Address', 'Payment', 'Items', 'Total', 'Status', 'Created', 'Updated']);
+    fputcsv($output, ['Order ID', 'Customer', 'Phone', 'Address', 'PIN Code', 'Payment', 'Items', 'Total', 'Status', 'Courier', 'Tracking Number', 'Estimated Delivery', 'Created', 'Updated']);
 
     while ($order = $result->fetch_assoc()) {
         $itemDescriptions = [];
@@ -71,10 +72,14 @@ try {
             $order['customer_name'],
             $order['phone'],
             $order['address'],
+            $order['postal_code'],
             $order['payment_method'],
             implode('; ', $itemDescriptions),
             $order['total'],
             $order['status'],
+            $order['courier_name'],
+            $order['tracking_number'],
+            $order['estimated_delivery_date'],
             $order['created_at'],
             $order['updated_at'],
         ]));

@@ -108,6 +108,9 @@ Run `database/migrate_order_idempotency.sql` once to ensure browser or network
 retries return the original order instead of creating a duplicate.
 Run `database/migrate_delivery_tracking.sql` once to let administrators publish
 courier, tracking-number, tracking-link and estimated-delivery details.
+Run `database/migrate_delivery_serviceability.sql` once to capture delivery PIN
+codes and manage checkout coverage from the admin dashboard. With no configured
+coverage entries, all valid Indian PIN codes remain accepted.
 
 After checkout, customers receive a clear on-screen receipt containing their order
 number and a direct link to the tracking page. The admin orders table includes a

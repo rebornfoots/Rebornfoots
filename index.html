@@ -358,7 +358,12 @@
         </div>
         <div class="field">
           <label for="customerAddress">Delivery address</label>
-          <textarea id="customerAddress" name="address" autocomplete="street-address" minlength="10" maxlength="500" rows="4" placeholder="House, street, landmark, city and PIN code" required></textarea>
+          <textarea id="customerAddress" name="address" autocomplete="street-address" minlength="10" maxlength="500" rows="4" placeholder="House, street, landmark and city" required></textarea>
+          <small class="field-error"></small>
+        </div>
+        <div class="field">
+          <label for="customerPincode">Delivery PIN code</label>
+          <input id="customerPincode" name="pincode" inputmode="numeric" autocomplete="postal-code" maxlength="6" pattern="[1-9][0-9]{5}" placeholder="6-digit PIN code" required>
           <small class="field-error"></small>
         </div>
         <div class="payment-box">
