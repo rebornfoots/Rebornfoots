@@ -133,6 +133,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_delivery') {
+    if (!validCsrf($_POST['csrf_token'] ?? null)) {
+        flash('error', 'Your session expired. Please try again.');
+    } else {
+        $orderId = filter_var($_POST['order_id'] ?? null, FILTER_VALIDATE_INT);
+        $courierName = trim((string) ($_POST['courier_name'] ?? ''));
+        $trackingNumber = trim((string) ($_POST['tracking_number'] ?? ''));
+        $trackingUrl = trim((string) ($_POST['tracking_url'] ?? ''));
+        $estimatedDate = trim((string) ($_POST['estimated_delivery_date'] ?? ''));
+        $validDate = $estimatedDate === '' || DateTimeImmutable::createFromFormat('!Y-m-d', $estimatedDate)?->format('Y-m-d') === $estimatedDate;
+        if ($orderId === false || $orderId < 1
+            || mb_strlen($courierName) > 100
+            || mb_strlen($trackingNumber) > 100
+            || mb_strlen($trackingUrl) > 500
+            || ($trackingUrl !== '' && filter_var($trackingUrl, FILTER_VALIDATE_URL) === false)
+            || ($trackingUrl !== '' && !in_array(strtolower((string) parse_url($trackingUrl, PHP_URL_SCHEME)), ['http', 'https'], true))
+            || !$validDate
+        ) {
+            flash('error', 'Enter valid delivery tracking details.');
+        } else {
+            try {
+                updateDeliveryDetails($orderId, $courierName, $trackingNumber, $trackingUrl, $estimatedDate === '' ? null : $estimatedDate);
+                flash('success', "Delivery details saved for order #{$orderId}.");
+            } catch (DomainException $error) {
+                flash('error', $error->getMessage());
+            } catch (Throwable $error) {
+                error_log('InbornFoot delivery update error: ' . $error->getMessage());
+                flash('error', 'The delivery details could not be saved.');
+            }
+        }
+    }
+    header('Location: /admin/' . safeReturnQuery($_POST['return_query'] ?? ''));
+    exit;
+}
+
 $search = trim((string) ($_GET['q'] ?? ''));
 $status = (string) ($_GET['status'] ?? '');
 $status = in_array($status, ADMIN_STATUSES, true) ? $status : '';
@@ -187,7 +222,8 @@ try {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $query = 'SELECT id, customer_name, phone, address, payment_method, order_details, total, status, created_at, updated_at
+    $query = 'SELECT id, customer_name, phone, address, payment_method, order_details, total, status,
+                     courier_name, tracking_number, tracking_url, estimated_delivery_date, created_at, updated_at
               FROM orders' . $where . ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
     $queryStatement = database()->prepare($query);
     $queryTypes = $types . 'ii';
@@ -318,6 +354,18 @@ $trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-ord
                       <p><?= h($order['payment_method']) ?></p>
                       <strong>Last updated</strong>
                       <p><?= h(date('d M Y, g:i A', strtotime((string) $order['updated_at']))) ?></p>
+                      <strong>Delivery tracking</strong>
+                      <form method="post" action="/admin/" class="delivery-form">
+                        <input type="hidden" name="action" value="update_delivery">
+                        <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+                        <input type="hidden" name="order_id" value="<?= h($order['id']) ?>">
+                        <input type="hidden" name="return_query" value="<?= h($currentQuery) ?>">
+                        <input name="courier_name" value="<?= h($order['courier_name']) ?>" maxlength="100" placeholder="Courier name">
+                        <input name="tracking_number" value="<?= h($order['tracking_number']) ?>" maxlength="100" placeholder="Tracking number">
+                        <input name="tracking_url" type="url" value="<?= h($order['tracking_url']) ?>" maxlength="500" placeholder="https://courier.example/track">
+                        <label>Estimated delivery <input name="estimated_delivery_date" type="date" value="<?= h($order['estimated_delivery_date']) ?>"></label>
+                        <button type="submit">Save delivery</button>
+                      </form>
                       <?php if (!empty($orderHistory[(int) $order['id']])): ?>
                         <strong>Status history</strong>
                         <ol class="status-history">

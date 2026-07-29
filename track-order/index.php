@@ -109,7 +109,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $database = new mysqli($host, $user, $password, $name);
                 $database->set_charset('utf8mb4');
                 $statement = $database->prepare(
-                    'SELECT id, customer_name, payment_method, order_details, total, status, created_at, updated_at
+                    'SELECT id, customer_name, payment_method, order_details, total, status,
+                            courier_name, tracking_number, tracking_url, estimated_delivery_date,
+                            created_at, updated_at
                      FROM orders WHERE id = ? AND phone = ? LIMIT 1'
                 );
                 $statement->bind_param('is', $orderId, $submittedPhone);
@@ -238,6 +240,19 @@ $reorderItems = $order
               </li>
             <?php endforeach; ?>
           </ol>
+        <?php endif; ?>
+
+        <?php if ($order['courier_name'] !== '' || $order['tracking_number'] !== '' || $order['estimated_delivery_date'] !== null): ?>
+          <div class="delivery-card">
+            <div><span>Courier</span><strong><?= escape($order['courier_name'] !== '' ? $order['courier_name'] : 'To be assigned') ?></strong></div>
+            <div><span>Tracking number</span><strong><?= escape($order['tracking_number'] !== '' ? $order['tracking_number'] : 'Pending') ?></strong></div>
+            <?php if ($order['estimated_delivery_date'] !== null): ?>
+              <div><span>Estimated delivery</span><strong><?= escape(date('d M Y', strtotime((string) $order['estimated_delivery_date']))) ?></strong></div>
+            <?php endif; ?>
+            <?php if ($order['tracking_url'] !== ''): ?>
+              <a href="<?= escape($order['tracking_url']) ?>" target="_blank" rel="noopener noreferrer">Track with courier ↗</a>
+            <?php endif; ?>
+          </div>
         <?php endif; ?>
 
         <div class="order-summary">

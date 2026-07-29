@@ -139,6 +139,34 @@ function statusLabel(string $status): string
     return ucfirst($status);
 }
 
+function updateDeliveryDetails(
+    int $orderId,
+    string $courierName,
+    string $trackingNumber,
+    string $trackingUrl,
+    ?string $estimatedDate
+): void {
+    $statement = database()->prepare(
+        'UPDATE orders
+         SET courier_name = ?, tracking_number = ?, tracking_url = ?, estimated_delivery_date = ?
+         WHERE id = ?'
+    );
+    $statement->bind_param('ssssi', $courierName, $trackingNumber, $trackingUrl, $estimatedDate, $orderId);
+    $statement->execute();
+    if ($statement->affected_rows === 0) {
+        $exists = database()->prepare('SELECT id FROM orders WHERE id = ?');
+        $exists->bind_param('i', $orderId);
+        $exists->execute();
+        $found = $exists->get_result()->fetch_assoc();
+        $exists->close();
+        if (!$found) {
+            $statement->close();
+            throw new DomainException('The order no longer exists.');
+        }
+    }
+    $statement->close();
+}
+
 function updateOrderStatusWithInventory(int $orderId, string $newStatus): bool
 {
     $database = database();

@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS orders (
     order_details JSON NOT NULL,
     total DECIMAL(10, 2) UNSIGNED NOT NULL,
     inventory_deducted TINYINT(1) NOT NULL DEFAULT 0,
+    courier_name VARCHAR(100) NOT NULL DEFAULT '',
+    tracking_number VARCHAR(100) NOT NULL DEFAULT '',
+    tracking_url VARCHAR(500) NOT NULL DEFAULT '',
+    estimated_delivery_date DATE NULL,
     status ENUM('pending', 'confirmed', 'paid', 'packed', 'shipped', 'delivered', 'cancelled')
         NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

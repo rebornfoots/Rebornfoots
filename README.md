@@ -106,6 +106,8 @@ the same transaction as the underlying change. Run
 the audit table and backfill one baseline event per existing order.
 Run `database/migrate_order_idempotency.sql` once to ensure browser or network
 retries return the original order instead of creating a duplicate.
+Run `database/migrate_delivery_tracking.sql` once to let administrators publish
+courier, tracking-number, tracking-link and estimated-delivery details.
 
 After checkout, customers receive a clear on-screen receipt containing their order
 number and a direct link to the tracking page. The admin orders table includes a
