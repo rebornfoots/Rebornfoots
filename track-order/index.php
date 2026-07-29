@@ -161,6 +161,7 @@ foreach ($history as $event) {
   <meta name="theme-color" content="#174f35">
   <title>Track Your Order | InbornFoot</title>
   <link rel="stylesheet" href="/track-order/styles.css">
+  <script src="/track-order/receipt.js" defer></script>
 </head>
 <body>
   <header class="tracking-header">
@@ -202,7 +203,10 @@ foreach ($history as $event) {
             <h2><?= $order['status'] === 'cancelled' ? 'This order was cancelled' : 'Hello, ' . escape(explode(' ', trim((string) $order['customer_name']))[0]) ?></h2>
             <p>Placed on <?= escape(date('d M Y \a\t g:i A', strtotime((string) $order['created_at']))) ?></p>
           </div>
-          <span class="status status-<?= escape($order['status']) ?>"><?= escape(ucfirst((string) $order['status'])) ?></span>
+          <div class="result-actions">
+            <span class="status status-<?= escape($order['status']) ?>"><?= escape(ucfirst((string) $order['status'])) ?></span>
+            <button class="print-receipt" type="button" data-print-receipt>Print receipt</button>
+          </div>
         </div>
 
         <?php if ($order['status'] === 'cancelled'): ?>
