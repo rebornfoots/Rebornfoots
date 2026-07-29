@@ -87,7 +87,9 @@ td:nth-child(2) { min-width: 155px; }
 td:nth-child(3) { min-width: 250px; }
 td:nth-child(5) { min-width: 185px; }
 td a { display: block; margin-top: 3px; color: var(--leaf); font-size: 12px; }
-.whatsapp-link { color: #147a43; font-size: 10px; font-weight: 750; }
+.whatsapp-form { display: grid; gap: 5px; margin-top: 8px; }
+.whatsapp-form select { width: 100%; padding: 6px; border: 1px solid #cbd5ce; border-radius: 7px; font-size: 10px; }
+.whatsapp-form button { padding: 7px 8px; color: #fff; background: #147a43; border: 0; border-radius: 7px; cursor: pointer; font-size: 10px; font-weight: 800; }
 details { position: relative; margin-top: 6px; }
 summary { color: var(--leaf); cursor: pointer; font-size: 11px; font-weight: 700; }
 .order-detail { width: 270px; margin-top: 8px; padding: 13px; color: var(--ink); background: #f4f7f4; border-radius: 8px; }

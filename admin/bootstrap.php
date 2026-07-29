@@ -139,6 +139,36 @@ function statusLabel(string $status): string
     return ucfirst($status);
 }
 
+function whatsappMessageOptions(array $order): array
+{
+    $options = [];
+    $status = (string) ($order['status'] ?? '');
+    $paymentStatus = (string) ($order['payment_status'] ?? '');
+    $refundStatus = (string) ($order['refund_status'] ?? '');
+
+    $statusTemplates = [
+        'pending' => ['order_received' => 'Order received'],
+        'confirmed' => ['order_confirmed' => 'Order confirmed'],
+        'paid' => ['payment_confirmed' => 'Payment confirmed'],
+        'packed' => ['order_packed' => 'Order packed'],
+        'shipped' => ['order_shipped' => 'Order shipped'],
+        'delivered' => ['order_delivered' => 'Order delivered'],
+        'cancelled' => ['order_cancelled' => 'Order cancelled'],
+    ];
+    if (isset($statusTemplates[$status])) {
+        $options += $statusTemplates[$status];
+    }
+    if ($paymentStatus === 'refund_pending' || in_array($refundStatus, ['initiating', 'pending'], true)) {
+        $options['refund_pending'] = 'Refund initiated';
+    } elseif ($paymentStatus === 'refunded' || $refundStatus === 'processed') {
+        $options['refund_processed'] = 'Refund completed';
+    } elseif ($paymentStatus === 'paid' && !in_array($status, ['paid', 'cancelled'], true)) {
+        $options['payment_confirmed'] = 'Payment confirmed';
+    }
+
+    return $options;
+}
+
 function updateDeliveryDetails(
     int $orderId,
     string $courierName,

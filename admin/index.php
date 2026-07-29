@@ -341,8 +341,6 @@ $currentQuery = http_build_query(array_filter([
     'status' => $status,
     'page' => $page > 1 ? $page : null,
 ], static fn ($value) => $value !== '' && $value !== null));
-$safeHost = preg_replace('/[^a-zA-Z0-9.:\-\[\]]/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'your-domain.com'));
-$trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-order/';
 ?>
 <!doctype html>
 <html lang="en">
@@ -451,7 +449,10 @@ $trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-ord
           <table>
             <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th>Placed</th></tr></thead>
             <tbody>
-            <?php foreach ($orders as $order): $items = normalizedOrderItems((string) $order['order_details']); ?>
+            <?php foreach ($orders as $order):
+                $items = normalizedOrderItems((string) $order['order_details']);
+                $whatsappOptions = whatsappMessageOptions($order);
+            ?>
               <tr>
                 <td data-label="Order">
                   <strong>#<?= h($order['id']) ?></strong>
@@ -516,11 +517,16 @@ $trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-ord
                 <td data-label="Customer">
                   <strong><?= h($order['customer_name']) ?></strong>
                   <a href="tel:+91<?= h($order['phone']) ?>"><?= h($order['phone']) ?></a>
-                  <a class="whatsapp-link" href="https://wa.me/91<?= h($order['phone']) ?>?text=<?= rawurlencode(
-                      'Hello ' . $order['customer_name'] . ', your InbornFoot order #' . $order['id']
-                      . ' is now ' . statusLabel((string) $order['status'])
-                      . '. Track it at ' . $trackingBaseUrl
-                  ) ?>" target="_blank" rel="noopener">WhatsApp update ↗</a>
+                  <form class="whatsapp-form" method="post" action="/admin/whatsapp.php" target="_blank">
+                    <input type="hidden" name="token" value="<?= h(csrfToken()) ?>">
+                    <input type="hidden" name="order_id" value="<?= h($order['id']) ?>">
+                    <select name="template" aria-label="WhatsApp message for order <?= h($order['id']) ?>">
+                      <?php foreach ($whatsappOptions as $template => $label): ?>
+                        <option value="<?= h($template) ?>"><?= h($label) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                    <button type="submit">WhatsApp ↗</button>
+                  </form>
                 </td>
                 <td data-label="Items">
                   <ul class="order-items">
