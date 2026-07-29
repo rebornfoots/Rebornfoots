@@ -1,154 +1,234 @@
 <?php
-header('Content-Type: application/json');
+declare(strict_types=1);
 
-$allowedOrigin = "https://farmers2home.com/";
+header('Content-Type: application/json; charset=utf-8');
+header('X-Content-Type-Options: nosniff');
+header('Cache-Control: no-store');
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$referer = $_SERVER['HTTP_REFERER'] ?? '';
+const MAX_REQUEST_BYTES = 16384;
+const MAX_ITEM_QUANTITY = 20;
 
-if (
-    ($origin && strpos($origin, $allowedOrigin) !== 0) &&
-    ($referer && strpos($referer, $allowedOrigin) !== 0)
-) {
-    http_response_code(403);
-    exit(json_encode([
-        "status" => "error",
-        "message" => "Access Denied"
-    ]));
+// Prices live only on the server. Never trust names or prices sent by a browser.
+const PRODUCTS = [
+    'karupatti-500' => [
+        'name' => 'Pure Palm Jaggery',
+        'variant' => '500 g',
+        'price' => 420.00,
+    ],
+    'cow-butter-1kg' => [
+        'name' => 'Pure Cow Butter',
+        'variant' => '1 kg (2 x 500 g)',
+        'price' => 820.00,
+    ],
+    'buffalo-butter-1kg' => [
+        'name' => 'Fresh White Butter',
+        'variant' => '1 kg (2 x 500 g)',
+        'price' => 840.00,
+    ],
+    'cow-ghee-1l' => [
+        'name' => 'Traditional Cow Ghee',
+        'variant' => '1 litre (2 x 500 ml)',
+        'price' => 1020.00,
+    ],
+    'buffalo-ghee-1l' => [
+        'name' => 'Village-Style Ghee',
+        'variant' => '1 litre (2 x 500 ml)',
+        'price' => 1050.00,
+    ],
+];
+
+function respond(int $statusCode, array $payload): never
+{
+    http_response_code($statusCode);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
 }
 
-$conn = new mysqli(
-    "MYSQL5044.site4now.net",
-    "aa83bc_farm2ho",
-    "farm2ho@001",
-    "db_aa83bc_farm2ho"
-);
-
-function sendTelegram($message)
+function cleanText(mixed $value): string
 {
-    $botToken = "8956076251:AAGdCs9M2SmTvVPr5--nGJSnbv_vDNl5G7E";
-    $chatId   = "977136414";
+    return trim(preg_replace('/\s+/u', ' ', is_string($value) ? $value : '') ?? '');
+}
 
-    $url = "https://api.telegram.org/bot".$botToken."/sendMessage";
+function telegramEscape(string $value): string
+{
+    return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
 
-    $data = [
-        "chat_id" => $chatId,
-        "text" => $message,
-        "parse_mode" => "HTML"
-    ];
+function sendTelegram(string $message, string $botToken, string $chatId): void
+{
+    if ($botToken === '' || $chatId === '') {
+        return;
+    }
 
-    $options = [
-        "http" => [
-            "header"  => "Content-type: application/x-www-form-urlencoded\r\n",
-            "method"  => "POST",
-            "content" => http_build_query($data)
-        ]
-    ];
+    $url = 'https://api.telegram.org/bot' . rawurlencode($botToken) . '/sendMessage';
+    $body = http_build_query([
+        'chat_id' => $chatId,
+        'text' => $message,
+        'parse_mode' => 'HTML',
+    ]);
 
-    $context = stream_context_create($options);
+    if (function_exists('curl_init')) {
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT => 5,
+        ]);
+        curl_exec($curl);
+        curl_close($curl);
+        return;
+    }
+
+    $context = stream_context_create([
+        'http' => [
+            'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
+            'method' => 'POST',
+            'content' => $body,
+            'timeout' => 5,
+        ],
+    ]);
     @file_get_contents($url, false, $context);
 }
 
-if ($conn->connect_error) {
-    die(json_encode([
-        "status"=>"error",
-        "message"=>$conn->connect_error
-    ]));
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Allow: POST');
+    respond(405, ['status' => 'error', 'message' => 'Method not allowed.']);
 }
 
-$name = $_POST['name'];
-$phone = $_POST['phone'];
-$address = $_POST['address'];
-$payment = $_POST['payment'];
-
-$cart = json_decode($_POST['cart'], true);
-
-$total = 0;
-$orderDetails = "";
-
-foreach($cart as $item){
-
-    $subtotal = $item['price'] * $item['qty'];
-
-    $total += $subtotal;
-
-    $orderDetails .=
-        $item['name'] .
-        " (" . $item['weight'] . ")" .
-        " Qty:" . $item['qty'] .
-        " ₹" . $subtotal . "\n";
+$contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+if ($contentLength <= 0 || $contentLength > MAX_REQUEST_BYTES) {
+    respond(413, ['status' => 'error', 'message' => 'The order request is empty or too large.']);
 }
 
-$stmt = $conn->prepare("
-INSERT INTO orders
-(customer_name, phone, address, payment_method, order_details, total)
-VALUES (?, ?, ?, ?, ?, ?)
-");
-
-if(!$stmt){
-    die(json_encode([
-        "status"=>"error",
-        "message"=>$conn->error
-    ]));
+$rawBody = file_get_contents('php://input', false, null, 0, MAX_REQUEST_BYTES + 1);
+try {
+    $request = json_decode($rawBody ?: '', true, 16, JSON_THROW_ON_ERROR);
+} catch (JsonException) {
+    respond(400, ['status' => 'error', 'message' => 'Invalid order data.']);
 }
 
-$stmt->bind_param(
-    "sssssd",
-    $name,
-    $phone,
-    $address,
-    $payment,
-    $orderDetails,
-    $total
-);
+if (!is_array($request)) {
+    respond(400, ['status' => 'error', 'message' => 'Invalid order data.']);
+}
 
-if($stmt->execute()){
-$orderId = $conn->insert_id;
-//================ TELEGRAM MESSAGE =================//
+$name = cleanText($request['name'] ?? '');
+$phone = preg_replace('/\D/', '', (string) ($request['phone'] ?? '')) ?? '';
+$address = cleanText($request['address'] ?? '');
+$payment = (string) ($request['payment'] ?? '');
+$items = $request['items'] ?? null;
 
-    $telegram = "";
+$errors = [];
+if (mb_strlen($name) < 2 || mb_strlen($name) > 100) {
+    $errors[] = 'Enter a valid full name.';
+}
+if (!preg_match('/^[6-9]\d{9}$/', $phone)) {
+    $errors[] = 'Enter a valid 10-digit Indian mobile number.';
+}
+if (mb_strlen($address) < 10 || mb_strlen($address) > 500) {
+    $errors[] = 'Enter a complete delivery address.';
+}
+if ($payment !== 'UPI') {
+    $errors[] = 'Select a supported payment method.';
+}
+if (!is_array($items) || count($items) < 1 || count($items) > count(PRODUCTS)) {
+    $errors[] = 'Your cart is empty or invalid.';
+}
+if ($errors !== []) {
+    respond(422, ['status' => 'error', 'message' => implode(' ', $errors)]);
+}
 
-    $telegram .= "🧈 <b>Farmers2Home ORDER</b>\n\n";
-
-    $telegram .= "🆔 <b>Order ID :</b> ".$orderId."\n";
-    $telegram .= "👤 <b>Name :</b> ".$name."\n";
-    $telegram .= "📞 <b>Phone :</b> ".$phone."\n";
-    $telegram .= "💳 <b>Payment :</b> ".$payment."\n\n";
-
-    $telegram .= "📍 <b>Delivery Address</b>\n";
-    $telegram .= $address."\n\n";
-
-    $telegram .= "🛒 <b>Order Items</b>\n";
-    $telegram .= "-----------------------------\n";
-
-    foreach($cart as $item){
-
-        $subtotal = $item['price'] * $item['qty'];
-
-        $telegram .= "• ".$item['name']." (".$item['weight'].")\n";
-        $telegram .= "   Qty : ".$item['qty']."\n";
-        $telegram .= "   Price : ₹".$item['price']."\n";
-        $telegram .= "   Total : ₹".$subtotal."\n\n";
+$validatedItems = [];
+$total = 0.0;
+foreach ($items as $item) {
+    if (!is_array($item)) {
+        respond(422, ['status' => 'error', 'message' => 'Your cart contains an invalid item.']);
     }
 
-    $telegram .= "-----------------------------\n";
-    $telegram .= "💰 <b>Grand Total : ₹".number_format($total,2)."</b>";
+    $productId = (string) ($item['productId'] ?? '');
+    $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_INT);
+    if (!isset(PRODUCTS[$productId]) || $quantity === false || $quantity < 1 || $quantity > MAX_ITEM_QUANTITY) {
+        respond(422, ['status' => 'error', 'message' => 'Your cart contains an unavailable item or quantity.']);
+    }
+    if (isset($validatedItems[$productId])) {
+        respond(422, ['status' => 'error', 'message' => 'Your cart contains duplicate items.']);
+    }
 
-    sendTelegram($telegram);
-    echo json_encode([
-        "status"=>"success",
-        "orderid"=>$orderId
-    ]);
-
-}else{
-
-    echo json_encode([
-        "status"=>"error",
-        "message"=>$stmt->error
-    ]);
+    $product = PRODUCTS[$productId];
+    $subtotal = $product['price'] * $quantity;
+    $validatedItems[$productId] = [
+        'name' => $product['name'],
+        'variant' => $product['variant'],
+        'price' => $product['price'],
+        'quantity' => $quantity,
+        'subtotal' => $subtotal,
+    ];
+    $total += $subtotal;
 }
 
-$stmt->close();
-$conn->close();
+$dbHost = getenv('F2H_DB_HOST') ?: '';
+$dbName = getenv('F2H_DB_NAME') ?: '';
+$dbUser = getenv('F2H_DB_USER') ?: '';
+$dbPassword = getenv('F2H_DB_PASSWORD') ?: '';
 
-?>
+if ($dbHost === '' || $dbName === '' || $dbUser === '') {
+    error_log('Farmers2Home: database environment variables are not configured.');
+    respond(503, ['status' => 'error', 'message' => 'Ordering is temporarily unavailable. Please contact us.']);
+}
+
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+try {
+    $database = new mysqli($dbHost, $dbUser, $dbPassword, $dbName);
+    $database->set_charset('utf8mb4');
+
+    $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    $statement = $database->prepare(
+        'INSERT INTO orders (customer_name, phone, address, payment_method, order_details, total)
+         VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    $statement->bind_param('sssssd', $name, $phone, $address, $payment, $orderDetails, $total);
+    $statement->execute();
+    $orderId = $database->insert_id;
+    $statement->close();
+    $database->close();
+} catch (Throwable $error) {
+    error_log('Farmers2Home order error: ' . $error->getMessage());
+    respond(500, ['status' => 'error', 'message' => 'We could not save your order. Please try again.']);
+}
+
+$lines = [
+    '🧺 <b>Farmers2Home order</b>',
+    '',
+    '🆔 <b>Order:</b> #' . $orderId,
+    '👤 <b>Name:</b> ' . telegramEscape($name),
+    '📞 <b>Phone:</b> ' . telegramEscape($phone),
+    '📍 <b>Address:</b> ' . telegramEscape($address),
+    '',
+    '🛒 <b>Items</b>',
+];
+foreach ($validatedItems as $item) {
+    $lines[] = sprintf(
+        '• %s (%s) × %d — ₹%s',
+        telegramEscape($item['name']),
+        telegramEscape($item['variant']),
+        $item['quantity'],
+        number_format($item['subtotal'], 0)
+    );
+}
+$lines[] = '';
+$lines[] = '💰 <b>Total: ₹' . number_format($total, 0) . '</b>';
+$lines[] = '💳 Payment: UPI after verification';
+
+sendTelegram(
+    implode("\n", $lines),
+    getenv('F2H_TELEGRAM_BOT_TOKEN') ?: '',
+    getenv('F2H_TELEGRAM_CHAT_ID') ?: ''
+);
+
+respond(201, [
+    'status' => 'success',
+    'orderId' => $orderId,
+    'total' => $total,
+]);
