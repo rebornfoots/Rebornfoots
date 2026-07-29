@@ -319,7 +319,7 @@ async function submitOrder(event) {
     phone: formData.get("phone").trim(),
     address: formData.get("address").trim(),
     pincode: formData.get("pincode").trim(),
-    payment: "UPI",
+    payment: "Razorpay",
     items: Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }))
   };
 
@@ -338,6 +338,55 @@ async function submitOrder(event) {
       throw new Error(result.message || "We couldn’t place your order. Please try again.");
     }
 
+    if (typeof window.Razorpay !== "function") {
+      throw new Error("Secure payment checkout could not load. Check your connection and try again.");
+    }
+
+    closeCheckout();
+    await new Promise((resolve, reject) => {
+      const checkout = new window.Razorpay({
+        key: result.razorpayKeyId,
+        order_id: result.razorpayOrderId,
+        amount: result.amountPaise,
+        currency: "INR",
+        name: "InbornFoot",
+        description: `Order #${result.orderId}`,
+        prefill: {
+          name: result.customer.name,
+          contact: result.customer.phone
+        },
+        theme: { color: "#174f35" },
+        modal: {
+          ondismiss: () => reject(new Error("Payment was cancelled. Your cart is still saved."))
+        },
+        handler: async payment => {
+          try {
+            const verification = await fetch("payment_verify.php", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Accept": "application/json" },
+              body: JSON.stringify({
+                orderId: result.orderId,
+                razorpayOrderId: payment.razorpay_order_id,
+                razorpayPaymentId: payment.razorpay_payment_id,
+                razorpaySignature: payment.razorpay_signature
+              })
+            });
+            const verified = await verification.json().catch(() => ({}));
+            if (!verification.ok || verified.status !== "success") {
+              throw new Error(verified.message || "Payment verification failed. Please contact us.");
+            }
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        }
+      });
+      checkout.on("payment.failed", response => {
+        reject(new Error(response.error?.description || "Payment failed. Please try again."));
+      });
+      checkout.open();
+    });
+
     cart = {};
     saveCart();
     elements.checkoutForm.reset();
@@ -346,6 +395,7 @@ async function submitOrder(event) {
     elements.orderSuccessDialog.showModal();
     checkoutRequestId = null;
   } catch (error) {
+    if (!elements.checkoutDialog.open) elements.checkoutDialog.showModal();
     elements.formMessage.textContent = error.message;
     elements.formMessage.hidden = false;
   } finally {

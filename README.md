@@ -111,6 +111,11 @@ courier, tracking-number, tracking-link and estimated-delivery details.
 Run `database/migrate_delivery_serviceability.sql` once to capture delivery PIN
 codes and manage checkout coverage from the admin dashboard. With no configured
 coverage entries, all valid Indian PIN codes remain accepted.
+Run `database/migrate_razorpay_payments.sql` once before enabling Razorpay. Set
+`F2H_RAZORPAY_KEY_ID` and `F2H_RAZORPAY_KEY_SECRET` as server environment
+variables. Checkout creates the Razorpay order on the server and marks an order
+paid only after signature, gateway order, captured status, currency and amount
+are all verified server-side.
 
 After checkout, customers receive a clear on-screen receipt containing their order
 number and a direct link to the tracking page. The admin orders table includes a

@@ -39,7 +39,8 @@ function csvSafe(mixed $value): string
 
 try {
     $statement = database()->prepare(
-        'SELECT id, customer_name, phone, address, postal_code, payment_method, order_details, total, status,
+        'SELECT id, customer_name, phone, address, postal_code, payment_method, payment_status,
+                gateway_order_id, gateway_payment_id, order_details, total, status,
                 courier_name, tracking_number, estimated_delivery_date, created_at, updated_at
          FROM orders' . $where . ' ORDER BY created_at DESC, id DESC LIMIT 10000'
     );
@@ -53,7 +54,7 @@ try {
     header('Content-Disposition: attachment; filename="inbornfoot-orders-' . date('Y-m-d-His') . '.csv"');
     echo "\xEF\xBB\xBF";
     $output = fopen('php://output', 'wb');
-    fputcsv($output, ['Order ID', 'Customer', 'Phone', 'Address', 'PIN Code', 'Payment', 'Items', 'Total', 'Status', 'Courier', 'Tracking Number', 'Estimated Delivery', 'Created', 'Updated']);
+    fputcsv($output, ['Order ID', 'Customer', 'Phone', 'Address', 'PIN Code', 'Payment Method', 'Payment Status', 'Gateway Order', 'Gateway Payment', 'Items', 'Total', 'Order Status', 'Courier', 'Tracking Number', 'Estimated Delivery', 'Created', 'Updated']);
 
     while ($order = $result->fetch_assoc()) {
         $itemDescriptions = [];
@@ -74,6 +75,9 @@ try {
             $order['address'],
             $order['postal_code'],
             $order['payment_method'],
+            $order['payment_status'],
+            $order['gateway_order_id'],
+            $order['gateway_payment_id'],
             implode('; ', $itemDescriptions),
             $order['total'],
             $order['status'],

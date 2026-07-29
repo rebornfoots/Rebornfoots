@@ -64,6 +64,38 @@ function sendTelegram(string $message, string $botToken, string $chatId): void
     @file_get_contents($url, false, $context);
 }
 
+function createRazorpayOrder(int $amountPaise, string $receipt, string $keyId, string $keySecret): array
+{
+    if (!function_exists('curl_init')) {
+        throw new RuntimeException('Razorpay requires the PHP cURL extension.');
+    }
+    $curl = curl_init('https://api.razorpay.com/v1/orders');
+    curl_setopt_array($curl, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode([
+            'amount' => $amountPaise,
+            'currency' => 'INR',
+            'receipt' => $receipt,
+        ], JSON_THROW_ON_ERROR),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_USERPWD => $keyId . ':' . $keySecret,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $body = curl_exec($curl);
+    $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    $curlError = curl_error($curl);
+    if (!is_string($body) || $status < 200 || $status >= 300) {
+        throw new RuntimeException('Razorpay order creation failed: HTTP ' . $status . ' ' . $curlError);
+    }
+    $order = json_decode($body, true, 16, JSON_THROW_ON_ERROR);
+    if (!is_array($order) || !is_string($order['id'] ?? null)) {
+        throw new RuntimeException('Razorpay returned an invalid order.');
+    }
+    return $order;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Allow: POST');
     respond(405, ['status' => 'error', 'message' => 'Method not allowed.']);
@@ -109,7 +141,7 @@ if (mb_strlen($address) < 10 || mb_strlen($address) > 500) {
 if (!preg_match('/^[1-9]\d{5}$/', $pincode)) {
     $errors[] = 'Enter a valid 6-digit delivery PIN code.';
 }
-if ($payment !== 'UPI') {
+if ($payment !== 'Razorpay') {
     $errors[] = 'Select a supported payment method.';
 }
 if (!is_array($items) || count($items) < 1 || count($items) > 50) {
@@ -144,8 +176,10 @@ $dbHost = getenv('F2H_DB_HOST') ?: '';
 $dbName = getenv('F2H_DB_NAME') ?: '';
 $dbUser = getenv('F2H_DB_USER') ?: '';
 $dbPassword = getenv('F2H_DB_PASSWORD') ?: '';
+$razorpayKeyId = getenv('F2H_RAZORPAY_KEY_ID') ?: '';
+$razorpayKeySecret = getenv('F2H_RAZORPAY_KEY_SECRET') ?: '';
 
-if ($dbHost === '' || $dbName === '' || $dbUser === '') {
+if ($dbHost === '' || $dbName === '' || $dbUser === '' || $razorpayKeyId === '' || $razorpayKeySecret === '') {
     error_log('InbornFoot: database environment variables are not configured.');
     respond(503, ['status' => 'error', 'message' => 'Ordering is temporarily unavailable. Please contact us.']);
 }
@@ -159,7 +193,7 @@ try {
 
     // Return the original result when a browser safely retries the same checkout.
     $existingStatement = $database->prepare(
-        'SELECT id, phone, total FROM orders WHERE request_key = ? LIMIT 1'
+        'SELECT id, customer_name, phone, total, gateway_order_id FROM orders WHERE request_key = ? LIMIT 1'
     );
     $existingStatement->bind_param('s', $requestId);
     $existingStatement->execute();
@@ -174,6 +208,10 @@ try {
             'orderId' => (int) $existingOrder['id'],
             'total' => (float) $existingOrder['total'],
             'duplicate' => true,
+            'razorpayKeyId' => $razorpayKeyId,
+            'razorpayOrderId' => (string) $existingOrder['gateway_order_id'],
+            'amountPaise' => (int) round((float) $existingOrder['total'] * 100),
+            'customer' => ['name' => (string) $existingOrder['customer_name'], 'phone' => $phone],
         ]);
     }
 
@@ -238,14 +276,32 @@ try {
         $total += $subtotal;
     }
 
+    $amountPaise = (int) round($total * 100);
+    try {
+        $gatewayOrder = createRazorpayOrder(
+            $amountPaise,
+            'if-' . str_replace('-', '', $requestId),
+            $razorpayKeyId,
+            $razorpayKeySecret
+        );
+    } catch (Throwable $gatewayError) {
+        error_log('InbornFoot Razorpay order error: ' . $gatewayError->getMessage());
+        respond(502, [
+            'status' => 'error',
+            'message' => 'Razorpay Test Mode could not create the payment. Check the test API credentials.',
+        ]);
+    }
+    $gatewayOrderId = (string) $gatewayOrder['id'];
+
     $database->begin_transaction();
     $transactionStarted = true;
     $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     $statement = $database->prepare(
-        'INSERT INTO orders (request_key, customer_name, phone, address, postal_code, payment_method, order_details, total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO orders (request_key, customer_name, phone, address, postal_code, payment_method,
+         gateway_order_id, order_details, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    $statement->bind_param('sssssssd', $requestId, $name, $phone, $address, $pincode, $payment, $orderDetails, $total);
+    $statement->bind_param('ssssssssd', $requestId, $name, $phone, $address, $pincode, $payment, $gatewayOrderId, $orderDetails, $total);
     $statement->execute();
     $orderId = $database->insert_id;
     $statement->close();
@@ -276,7 +332,7 @@ try {
     ) {
         try {
             $retryStatement = $database->prepare(
-                'SELECT id, phone, total FROM orders WHERE request_key = ? LIMIT 1'
+                'SELECT id, customer_name, phone, total, gateway_order_id FROM orders WHERE request_key = ? LIMIT 1'
             );
             $retryStatement->bind_param('s', $requestId);
             $retryStatement->execute();
@@ -288,6 +344,10 @@ try {
                     'orderId' => (int) $retryOrder['id'],
                     'total' => (float) $retryOrder['total'],
                     'duplicate' => true,
+                    'razorpayKeyId' => $razorpayKeyId,
+                    'razorpayOrderId' => (string) $retryOrder['gateway_order_id'],
+                    'amountPaise' => (int) round((float) $retryOrder['total'] * 100),
+                    'customer' => ['name' => (string) $retryOrder['customer_name'], 'phone' => $phone],
                 ]);
             }
         } catch (Throwable $retryError) {
@@ -319,7 +379,7 @@ foreach ($validatedItems as $item) {
 }
 $lines[] = '';
 $lines[] = '💰 <b>Total: ₹' . number_format($total, 0) . '</b>';
-$lines[] = '💳 Payment: UPI after verification';
+$lines[] = '💳 Payment: Razorpay checkout pending';
 
 sendTelegram(
     implode("\n", $lines),
@@ -331,4 +391,8 @@ respond(201, [
     'status' => 'success',
     'orderId' => $orderId,
     'total' => $total,
+    'razorpayKeyId' => $razorpayKeyId,
+    'razorpayOrderId' => $gatewayOrderId,
+    'amountPaise' => $amountPaise,
+    'customer' => ['name' => $name, 'phone' => $phone],
 ]);

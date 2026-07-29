@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS orders (
     address VARCHAR(500) NOT NULL,
     postal_code CHAR(6) NOT NULL,
     payment_method VARCHAR(20) NOT NULL DEFAULT 'UPI',
+    gateway_order_id VARCHAR(100) NULL,
+    gateway_payment_id VARCHAR(100) NULL,
+    payment_status ENUM('created', 'paid', 'failed', 'refunded') NOT NULL DEFAULT 'created',
     order_details JSON NOT NULL,
     total DECIMAL(10, 2) UNSIGNED NOT NULL,
     inventory_deducted TINYINT(1) NOT NULL DEFAULT 0,
@@ -18,6 +21,8 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE INDEX idx_orders_request_key (request_key),
+    UNIQUE INDEX idx_orders_gateway_order (gateway_order_id),
+    UNIQUE INDEX idx_orders_gateway_payment (gateway_payment_id),
     INDEX idx_orders_phone (phone),
     INDEX idx_orders_status_created (status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

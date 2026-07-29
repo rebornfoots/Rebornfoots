@@ -263,7 +263,8 @@ try {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $query = 'SELECT id, customer_name, phone, address, postal_code, payment_method, order_details, total, status,
+    $query = 'SELECT id, customer_name, phone, address, postal_code, payment_method, payment_status,
+                     gateway_order_id, gateway_payment_id, order_details, total, status,
                      courier_name, tracking_number, tracking_url, estimated_delivery_date, created_at, updated_at
               FROM orders' . $where . ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
     $queryStatement = database()->prepare($query);
@@ -424,7 +425,9 @@ $trackingBaseUrl = ($isHttps ? 'https://' : 'http://') . $safeHost . '/track-ord
                       <p><?= nl2br(h($order['address'])) ?></p>
                       <?php if ($order['postal_code'] !== null): ?><strong>PIN code</strong><p><?= h($order['postal_code']) ?></p><?php endif; ?>
                       <strong>Payment</strong>
-                      <p><?= h($order['payment_method']) ?></p>
+                      <p><?= h($order['payment_method']) ?> · <?= h(ucfirst((string) $order['payment_status'])) ?></p>
+                      <?php if ($order['gateway_order_id'] !== null): ?><strong>Gateway order</strong><p><?= h($order['gateway_order_id']) ?></p><?php endif; ?>
+                      <?php if ($order['gateway_payment_id'] !== null): ?><strong>Gateway payment</strong><p><?= h($order['gateway_payment_id']) ?></p><?php endif; ?>
                       <strong>Last updated</strong>
                       <p><?= h(date('d M Y, g:i A', strtotime((string) $order['updated_at']))) ?></p>
                       <strong>Delivery tracking</strong>
