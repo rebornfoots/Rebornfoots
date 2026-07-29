@@ -102,14 +102,24 @@ nav a:hover { color: var(--leaf); }
 .product-buy .contact-price { font-size: 15px; }
 .combo-section { padding: 70px 6vw; background: #edf5ef; }
 .combo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-.combo-card { display: grid; gap: 16px; padding: 22px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 28px rgba(18,65,43,.06); }
-.combo-card h3 { margin: 5px 0 0; font-family: Georgia, serif; font-size: 25px; }
+.combo-card { display: grid; grid-template-rows: 220px 1fr; overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 14px 38px rgba(18,65,43,.09); transition: transform .2s, box-shadow .2s; }
+.combo-card:hover { transform: translateY(-4px); box-shadow: 0 20px 45px rgba(18,65,43,.14); }
+.combo-visual { overflow: hidden; background: #dfeae2; }
+.combo-visual > img { width: 100%; height: 100%; object-fit: cover; }
+.combo-collage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.combo-collage > img { min-width: 0; }
+.combo-body { display: flex; flex-direction: column; gap: 15px; padding: 24px; }
+.combo-card h3 { margin: 2px 0 0; font-family: Georgia, serif; font-size: 25px; line-height: 1.15; }
 .combo-items { display: grid; gap: 7px; margin: 0; padding: 0; color: var(--muted); list-style: none; font-size: 13px; }
 .combo-items li { display: flex; justify-content: space-between; gap: 10px; }
-.combo-price { display: flex; align-items: end; justify-content: space-between; gap: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.combo-footer { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 18px; margin-top: auto; padding-top: 17px; border-top: 1px solid var(--line); }
+.combo-price { display: flex; flex-direction: column; gap: 2px; }
 .combo-price strong { display: block; color: var(--forest); font-size: 24px; }
 .combo-price s { color: var(--muted); font-size: 12px; }
 .combo-saving { display: inline-flex; width: fit-content; padding: 5px 9px; color: #176b39; background: #e4f7e9; border-radius: 999px; font-size: 11px; font-weight: 800; }
+.combo-footer button { min-height: 48px; padding: 12px 18px; color: #fff; background: var(--forest); border: 0; border-radius: 14px; box-shadow: 0 7px 16px rgba(22,89,58,.2); cursor: pointer; font: inherit; font-size: 13px; font-weight: 850; transition: background .2s, transform .2s; }
+.combo-footer button:hover { background: var(--forest-dark); transform: translateY(-1px); }
+.combo-footer button:active { transform: translateY(1px); }
 
 .story { display: grid; grid-template-columns: 1fr 1fr; min-height: 650px; background: var(--forest); }
 .story-photo { position: relative; min-height: 520px; background: url("https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=1200&q=85") center/cover; }

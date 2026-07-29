@@ -1,0 +1,2 @@
+ALTER TABLE combo_offers
+    ADD COLUMN image_url VARCHAR(500) NOT NULL DEFAULT '' AFTER name;

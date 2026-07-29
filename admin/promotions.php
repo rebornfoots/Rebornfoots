@@ -19,6 +19,19 @@ function optionalNumber(mixed $value): float|int|null|false
     return $text === '' ? null : filter_var($text, FILTER_VALIDATE_FLOAT);
 }
 
+function validImageUrl(string $value): bool
+{
+    if ($value === '') {
+        return true;
+    }
+    if (str_starts_with($value, '/') && !str_starts_with($value, '//')) {
+        return mb_strlen($value) <= 500;
+    }
+    return mb_strlen($value) <= 500
+        && filter_var($value, FILTER_VALIDATE_URL) !== false
+        && in_array(strtolower((string) parse_url($value, PHP_URL_SCHEME)), ['http', 'https'], true);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validCsrf($_POST['csrf_token'] ?? null)) {
         flash('error', 'Your session expired. Please try again.');
@@ -89,8 +102,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement->execute();
             $statement->close();
             flash('success', $active ? 'Combo activated.' : 'Combo paused.');
+        } elseif ($action === 'save_combo_image') {
+            $comboId = filter_var($_POST['combo_id'] ?? null, FILTER_VALIDATE_INT);
+            $imageUrl = trim((string) ($_POST['image_url'] ?? ''));
+            if ($comboId === false || $comboId < 1 || !validImageUrl($imageUrl)) {
+                throw new DomainException('Enter a valid combo image URL or site-relative image path.');
+            }
+            $statement = database()->prepare('UPDATE combo_offers SET image_url = ? WHERE id = ?');
+            $statement->bind_param('si', $imageUrl, $comboId);
+            $statement->execute();
+            $statement->close();
+            flash('success', 'Combo image updated.');
         } elseif ($action === 'save_combo') {
             $name = mb_substr(trim((string) ($_POST['name'] ?? '')), 0, 120);
+            $imageUrl = trim((string) ($_POST['image_url'] ?? ''));
             $type = (string) ($_POST['discount_type'] ?? '');
             $value = filter_var($_POST['discount_value'] ?? null, FILTER_VALIDATE_FLOAT);
             $priority = filter_var($_POST['priority'] ?? 100, FILTER_VALIDATE_INT);
@@ -108,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $items[$match[1]] = (int) $match[2];
             }
-            if (mb_strlen($name) < 3 || count($items) < 2
+            if (mb_strlen($name) < 3 || count($items) < 2 || !validImageUrl($imageUrl)
                 || !in_array($type, ['percent', 'fixed'], true)
                 || $value === false || $value <= 0 || ($type === 'percent' && $value > 100)
                 || $priority === false || $priority < 1 || $priority > 65535
@@ -131,10 +156,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $statement = database()->prepare(
                     'INSERT INTO combo_offers
-                     (name, discount_type, discount_value, priority, starts_at, ends_at, active)
-                     VALUES (?, ?, ?, ?, ?, ?, 1)'
+                     (name, image_url, discount_type, discount_value, priority, starts_at, ends_at, active)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, 1)'
                 );
-                $statement->bind_param('ssdiss', $name, $type, $value, $priority, $startsAt, $endsAt);
+                $statement->bind_param('sssdiss', $name, $imageUrl, $type, $value, $priority, $startsAt, $endsAt);
                 $statement->execute();
                 $comboId = database()->insert_id;
                 $statement->close();
@@ -172,7 +197,7 @@ try {
          FROM coupons ORDER BY created_at DESC'
     )->fetch_all(MYSQLI_ASSOC);
     $combos = database()->query(
-        "SELECT combo_offers.id, combo_offers.name, combo_offers.discount_type,
+        "SELECT combo_offers.id, combo_offers.name, combo_offers.image_url, combo_offers.discount_type,
                 combo_offers.discount_value, combo_offers.priority, combo_offers.active,
                 GROUP_CONCAT(CONCAT(combo_offer_items.product_id, ':', combo_offer_items.quantity)
                     ORDER BY combo_offer_items.product_id SEPARATOR ', ') AS items
@@ -228,6 +253,7 @@ $flash = takeFlash();
         <form method="post" class="product-form">
           <input type="hidden" name="action" value="save_combo"><input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
           <label><span>Name</span><input name="name" maxlength="120" placeholder="Oil family combo" required></label>
+          <label><span>Combo image URL</span><input name="image_url" maxlength="500" placeholder="/assets/images/oil-combo.jpg"></label>
           <label><span>Discount type</span><select name="discount_type"><option value="percent">Percentage</option><option value="fixed">Fixed ₹ amount</option></select></label>
           <label><span>Discount value</span><input name="discount_value" type="number" min="0.01" step="0.01" required></label>
           <label><span>Priority</span><input name="priority" type="number" min="1" max="65535" value="100" required></label>
@@ -245,6 +271,17 @@ $flash = takeFlash();
     </section>
     <section class="product-list promotion-list">
       <div class="product-list-head"><strong>Combo offers</strong><span><?= count($combos) ?> configured</span></div>
+      <?php if ($combos !== []): ?>
+        <form method="post" class="combo-image-editor">
+          <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+          <input type="hidden" name="action" value="save_combo_image">
+          <select name="combo_id" aria-label="Combo offer" required>
+            <?php foreach ($combos as $combo): ?><option value="<?= h($combo['id']) ?>"><?= h($combo['name']) ?></option><?php endforeach; ?>
+          </select>
+          <input name="image_url" maxlength="500" placeholder="/assets/images/oil-combo.jpg or https://..." required>
+          <button type="submit">Save combo image</button>
+        </form>
+      <?php endif; ?>
       <?php foreach ($combos as $combo): ?><article class="admin-product <?= $combo['active'] ? '' : 'is-inactive' ?>"><div class="admin-product-copy"><h2><?= h($combo['name']) ?></h2><p><?= h($combo['items']) ?> · <?= $combo['discount_type'] === 'percent' ? h($combo['discount_value']) . '%' : '₹' . number_format((float) $combo['discount_value'], 0) ?> off · priority <?= h($combo['priority']) ?></p></div><form method="post" class="admin-product-actions"><input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>"><input type="hidden" name="action" value="toggle_combo"><input type="hidden" name="combo_id" value="<?= h($combo['id']) ?>"><input type="hidden" name="active" value="<?= $combo['active'] ? '0' : '1' ?>"><button type="submit"><?= $combo['active'] ? 'Pause' : 'Activate' ?></button></form></article><?php endforeach; ?>
     </section>
   </main>

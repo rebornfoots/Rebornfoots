@@ -150,6 +150,9 @@ time small { display: block; color: var(--muted); }
 .product-form input[readonly] { color: var(--muted); background: #f2f4f2; }
 .product-form label > small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
 .product-form .wide { grid-column: 1 / -1; }
+.combo-image-editor { display: grid; grid-template-columns: 220px 1fr auto; gap: 10px; padding: 15px 20px; border-bottom: 1px solid var(--line); }
+.combo-image-editor select, .combo-image-editor input { min-height: 42px; padding: 9px 11px; border: 1px solid #cbd5ce; border-radius: 9px; }
+.combo-image-editor button { padding: 9px 15px; color: #fff; background: var(--forest); border: 0; border-radius: 9px; cursor: pointer; font-weight: 800; }
 .product-checks { display: flex; flex-wrap: wrap; gap: 25px; }
 .product-checks label { display: flex; align-items: center; gap: 8px; }
 .product-checks input { width: 18px; height: 18px; }
@@ -187,6 +190,7 @@ time small { display: block; color: var(--muted); }
   .pincode-form { grid-template-columns: 1fr; }
   .catalog-metrics { grid-template-columns: 1fr; gap: 9px; }
   .product-form { grid-template-columns: 1fr; padding: 17px; }
+  .combo-image-editor { grid-template-columns: 1fr; }
   .product-form .wide { grid-column: auto; }
   .admin-product { grid-template-columns: 70px 1fr; gap: 12px; padding: 13px; }
   .admin-product-image { width: 70px; height: 60px; }

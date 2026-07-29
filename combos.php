@@ -27,7 +27,7 @@ try {
     $database = new mysqli($host, $user, $password, $name);
     $database->set_charset('utf8mb4');
     $result = $database->query(
-        "SELECT combo_offers.id, combo_offers.name, combo_offers.discount_type,
+        "SELECT combo_offers.id, combo_offers.name, combo_offers.image_url, combo_offers.discount_type,
                 combo_offers.discount_value, combo_offers.priority,
                 (SELECT COUNT(*) FROM combo_offer_items configured_items
                  WHERE configured_items.combo_id = combo_offers.id) AS required_item_count,
@@ -51,6 +51,7 @@ try {
             $combos[$id] = [
                 'id' => $id,
                 'name' => (string) $row['name'],
+                'imageUrl' => (string) $row['image_url'],
                 'discountType' => (string) $row['discount_type'],
                 'discountValue' => (float) $row['discount_value'],
                 'requiredItemCount' => (int) $row['required_item_count'],

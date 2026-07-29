@@ -422,6 +422,26 @@ async function loadCombos() {
       const card = document.createElement("article");
       card.className = "combo-card";
 
+      const visual = document.createElement("div");
+      visual.className = "combo-visual";
+      if (combo.imageUrl) {
+        const image = document.createElement("img");
+        image.src = combo.imageUrl;
+        image.alt = combo.name;
+        image.loading = "lazy";
+        visual.append(image);
+      } else {
+        visual.classList.add("combo-collage");
+        combo.items.slice(0, 3).forEach(item => {
+          const image = document.createElement("img");
+          image.src = item.imageUrl;
+          image.alt = "";
+          image.loading = "lazy";
+          visual.append(image);
+        });
+      }
+      const body = document.createElement("div");
+      body.className = "combo-body";
       const eyebrow = document.createElement("p");
       eyebrow.className = "combo-saving";
       eyebrow.textContent = `Save ${money(Number(combo.discount) || 0)}`;
@@ -456,7 +476,8 @@ async function loadCombos() {
         openCart();
       });
       footer.append(price, button);
-      card.append(eyebrow, title, items, footer);
+      body.append(eyebrow, title, items, footer);
+      card.append(visual, body);
       elements.comboGrid.append(card);
     });
     elements.comboSection.hidden = combos.length === 0;
