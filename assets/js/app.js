@@ -515,7 +515,7 @@ async function submitOrder(event) {
     address: formData.get("address").trim(),
     pincode,
     couponCode: elements.couponCode.value.trim().toUpperCase(),
-    payment: "Razorpay",
+    payment: "UPI",
     items: Object.entries(cart).map(([productId, quantity]) => ({ productId, quantity }))
   };
 
@@ -544,55 +544,6 @@ async function submitOrder(event) {
       combos: Array.isArray(result.combos) ? result.combos : []
     };
     renderCheckoutTotal();
-
-    if (typeof window.Razorpay !== "function") {
-      throw new Error("Secure payment checkout could not load. Check your connection and try again.");
-    }
-
-    closeCheckout();
-    await new Promise((resolve, reject) => {
-      const checkout = new window.Razorpay({
-        key: result.razorpayKeyId,
-        order_id: result.razorpayOrderId,
-        amount: result.amountPaise,
-        currency: "INR",
-        name: "InbornFoot",
-        description: `Order #${result.orderId}`,
-        prefill: {
-          name: result.customer.name,
-          contact: result.customer.phone
-        },
-        theme: { color: "#174f35" },
-        modal: {
-          ondismiss: () => reject(new Error("Payment was cancelled. Your cart is still saved."))
-        },
-        handler: async payment => {
-          try {
-            const verification = await fetch("payment_verify.php", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "Accept": "application/json" },
-              body: JSON.stringify({
-                orderId: result.orderId,
-                razorpayOrderId: payment.razorpay_order_id,
-                razorpayPaymentId: payment.razorpay_payment_id,
-                razorpaySignature: payment.razorpay_signature
-              })
-            });
-            const verified = await verification.json().catch(() => ({}));
-            if (!verification.ok || verified.status !== "success") {
-              throw new Error(verified.message || "Payment verification failed. Please contact us.");
-            }
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
-        }
-      });
-      checkout.on("payment.failed", response => {
-        reject(new Error(response.error?.description || "Payment failed. Please try again."));
-      });
-      checkout.open();
-    });
 
     cart = {};
     saveCart();

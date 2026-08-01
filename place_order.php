@@ -66,38 +66,6 @@ function sendTelegram(string $message, string $botToken, string $chatId): void
     @file_get_contents($url, false, $context);
 }
 
-function createRazorpayOrder(int $amountPaise, string $receipt, string $keyId, string $keySecret): array
-{
-    if (!function_exists('curl_init')) {
-        throw new RuntimeException('Razorpay requires the PHP cURL extension.');
-    }
-    $curl = curl_init('https://api.razorpay.com/v1/orders');
-    curl_setopt_array($curl, [
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode([
-            'amount' => $amountPaise,
-            'currency' => 'INR',
-            'receipt' => $receipt,
-        ], JSON_THROW_ON_ERROR),
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-        CURLOPT_USERPWD => $keyId . ':' . $keySecret,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 15,
-    ]);
-    $body = curl_exec($curl);
-    $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-    $curlError = curl_error($curl);
-    if (!is_string($body) || $status < 200 || $status >= 300) {
-        throw new RuntimeException('Razorpay order creation failed: HTTP ' . $status . ' ' . $curlError);
-    }
-    $order = json_decode($body, true, 16, JSON_THROW_ON_ERROR);
-    if (!is_array($order) || !is_string($order['id'] ?? null)) {
-        throw new RuntimeException('Razorpay returned an invalid order.');
-    }
-    return $order;
-}
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Allow: POST');
     respond(405, ['status' => 'error', 'message' => 'Method not allowed.']);
@@ -144,7 +112,7 @@ if (mb_strlen($address) < 10 || mb_strlen($address) > 500) {
 if (!preg_match('/^[1-9]\d{5}$/', $pincode)) {
     $errors[] = 'Enter a valid 6-digit delivery PIN code.';
 }
-if ($payment !== 'Razorpay') {
+if ($payment !== 'UPI') {
     $errors[] = 'Select a supported payment method.';
 }
 if ($couponCode !== '' && !preg_match('/^[A-Z0-9_-]{3,30}$/', $couponCode)) {
@@ -182,10 +150,7 @@ $dbHost = getenv('F2H_DB_HOST') ?: '';
 $dbName = getenv('F2H_DB_NAME') ?: '';
 $dbUser = getenv('F2H_DB_USER') ?: '';
 $dbPassword = getenv('F2H_DB_PASSWORD') ?: '';
-$razorpayKeyId = getenv('F2H_RAZORPAY_KEY_ID') ?: '';
-$razorpayKeySecret = getenv('F2H_RAZORPAY_KEY_SECRET') ?: '';
-
-if ($dbHost === '' || $dbName === '' || $dbUser === '' || $razorpayKeyId === '' || $razorpayKeySecret === '') {
+if ($dbHost === '' || $dbName === '' || $dbUser === '') {
     error_log('InbornFoot: database environment variables are not configured.');
     respond(503, ['status' => 'error', 'message' => 'Ordering is temporarily unavailable. Please contact us.']);
 }
@@ -200,7 +165,7 @@ try {
     // Return the original result when a browser safely retries the same checkout.
     $existingStatement = $database->prepare(
         'SELECT id, customer_name, phone, subtotal, delivery_fee, coupon_code, coupon_discount,
-                combo_discount, discount_total, total, estimated_delivery_date, gateway_order_id
+                combo_discount, discount_total, total, estimated_delivery_date
          FROM orders WHERE request_key = ? LIMIT 1'
     );
     $existingStatement->bind_param('s', $requestId);
@@ -223,9 +188,6 @@ try {
             'total' => (float) $existingOrder['total'],
             'estimatedDeliveryDate' => $existingOrder['estimated_delivery_date'],
             'duplicate' => true,
-            'razorpayKeyId' => $razorpayKeyId,
-            'razorpayOrderId' => (string) $existingOrder['gateway_order_id'],
-            'amountPaise' => (int) round((float) $existingOrder['total'] * 100),
             'customer' => ['name' => (string) $existingOrder['customer_name'], 'phone' => $phone],
         ]);
     }
@@ -312,23 +274,6 @@ try {
     $comboDiscount = (float) $promotions['comboDiscount'];
     $discountTotal = (float) $promotions['discountTotal'];
     $total = round(max(0, $itemsSubtotal - $discountTotal) + $deliveryFee, 2);
-    $amountPaise = (int) round($total * 100);
-    try {
-        $gatewayOrder = createRazorpayOrder(
-            $amountPaise,
-            'if-' . str_replace('-', '', $requestId),
-            $razorpayKeyId,
-            $razorpayKeySecret
-        );
-    } catch (Throwable $gatewayError) {
-        error_log('InbornFoot Razorpay order error: ' . $gatewayError->getMessage());
-        respond(502, [
-            'status' => 'error',
-            'message' => 'Razorpay Test Mode could not create the payment. Check the test API credentials.',
-        ]);
-    }
-    $gatewayOrderId = (string) $gatewayOrder['id'];
-
     $database->begin_transaction();
     $transactionStarted = true;
     $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
@@ -341,19 +286,18 @@ try {
     ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     $statement = $database->prepare(
         'INSERT INTO orders (request_key, customer_name, phone, address, postal_code, payment_method,
-         gateway_order_id, order_details, subtotal, delivery_fee, coupon_code, coupon_discount,
+         order_details, subtotal, delivery_fee, coupon_code, coupon_discount,
          combo_discount, discount_total, promotions_json, total, estimated_delivery_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $statement->bind_param(
-        'ssssssssddsdddsds',
+        'sssssssddsdddsds',
         $requestId,
         $name,
         $phone,
         $address,
         $pincode,
         $payment,
-        $gatewayOrderId,
         $orderDetails,
         $itemsSubtotal,
         $deliveryFee,
@@ -412,7 +356,7 @@ try {
             $retryStatement = $database->prepare(
                 'SELECT id, customer_name, phone, subtotal, delivery_fee, coupon_code,
                         coupon_discount, combo_discount, discount_total, total,
-                        estimated_delivery_date, gateway_order_id
+                        estimated_delivery_date
                  FROM orders WHERE request_key = ? LIMIT 1'
             );
             $retryStatement->bind_param('s', $requestId);
@@ -432,9 +376,6 @@ try {
                     'total' => (float) $retryOrder['total'],
                     'estimatedDeliveryDate' => $retryOrder['estimated_delivery_date'],
                     'duplicate' => true,
-                    'razorpayKeyId' => $razorpayKeyId,
-                    'razorpayOrderId' => (string) $retryOrder['gateway_order_id'],
-                    'amountPaise' => (int) round((float) $retryOrder['total'] * 100),
                     'customer' => ['name' => (string) $retryOrder['customer_name'], 'phone' => $phone],
                 ]);
             }
@@ -474,7 +415,7 @@ $lines[] = 'Discount: -₹' . number_format($discountTotal, 0);
 $lines[] = 'Delivery: ' . ($deliveryFee > 0 ? '₹' . number_format($deliveryFee, 0) : 'Free');
 $lines[] = '💰 <b>Total: ₹' . number_format($total, 0) . '</b>';
 $lines[] = "Estimated delivery: {$minDeliveryDays}-{$maxDeliveryDays} days";
-$lines[] = '💳 Payment: Razorpay checkout pending';
+$lines[] = '💳 Payment: UPI details to be shared after confirmation';
 
 sendTelegram(
     implode("\n", $lines),
@@ -494,8 +435,5 @@ respond(201, [
     'combos' => $promotions['combos'],
     'total' => $total,
     'estimatedDeliveryDate' => $estimatedDeliveryDate,
-    'razorpayKeyId' => $razorpayKeyId,
-    'razorpayOrderId' => $gatewayOrderId,
-    'amountPaise' => $amountPaise,
     'customer' => ['name' => $name, 'phone' => $phone],
 ]);

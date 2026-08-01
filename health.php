@@ -6,16 +6,13 @@ header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 
 $checks = [
-    'php' => version_compare(PHP_VERSION, '8.3.0', '>='),
+    'php' => version_compare(PHP_VERSION, '8.2.0', '>='),
     'curl' => extension_loaded('curl'),
     'mysqli' => extension_loaded('mysqli'),
     'mbstring' => extension_loaded('mbstring'),
     'database_config' => (getenv('F2H_DB_HOST') ?: '') !== ''
         && (getenv('F2H_DB_NAME') ?: '') !== ''
         && (getenv('F2H_DB_USER') ?: '') !== '',
-    'razorpay_config' => str_starts_with(getenv('F2H_RAZORPAY_KEY_ID') ?: '', 'rzp_test_')
-        && (getenv('F2H_RAZORPAY_KEY_SECRET') ?: '') !== ''
-        && (getenv('F2H_RAZORPAY_WEBHOOK_SECRET') ?: '') !== '',
 ];
 
 if ($checks['database_config'] && $checks['mysqli']) {
