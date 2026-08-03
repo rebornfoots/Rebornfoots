@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/includes/app_config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -12,10 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-$host = getenv('F2H_DB_HOST') ?: '';
-$name = getenv('F2H_DB_NAME') ?: '';
-$user = getenv('F2H_DB_USER') ?: '';
-$password = getenv('F2H_DB_PASSWORD') ?: '';
+$host = (string) appConfig('F2H_DB_HOST');
+$name = (string) appConfig('F2H_DB_NAME');
+$user = (string) appConfig('F2H_DB_USER');
+$password = (string) appConfig('F2H_DB_PASSWORD');
 if ($host === '' || $name === '' || $user === '') {
     http_response_code(503);
     echo json_encode(['status' => 'error', 'message' => 'Combos unavailable.']);
@@ -89,7 +90,7 @@ try {
         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     );
 } catch (Throwable $error) {
-    error_log('InbornFoot combos API error: ' . $error->getMessage());
+    error_log('InbornFood combos API error: ' . $error->getMessage());
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => 'Combos unavailable.']);
 }

@@ -40,7 +40,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $action = (string) ($_POST['action'] ?? '');
     try {
-        if ($action === 'toggle_coupon') {
+        if ($action === 'save_homepage') {
+            $values = [
+                'offer_enabled' => ($_POST['offer_enabled'] ?? '') === '1' ? '1' : '0',
+                'offer_text' => mb_substr(trim((string) ($_POST['offer_text'] ?? '')), 0, 180),
+                'hero_eyebrow' => mb_substr(trim((string) ($_POST['hero_eyebrow'] ?? '')), 0, 100),
+                'hero_title' => mb_substr(trim((string) ($_POST['hero_title'] ?? '')), 0, 140),
+                'hero_text' => mb_substr(trim((string) ($_POST['hero_text'] ?? '')), 0, 300),
+                'hero_image_url' => trim((string) ($_POST['hero_image_url'] ?? '')),
+                'hero_cta_label' => mb_substr(trim((string) ($_POST['hero_cta_label'] ?? '')), 0, 60),
+                'hero_cta_url' => trim((string) ($_POST['hero_cta_url'] ?? '')),
+            ];
+            if (($values['offer_enabled'] === '1' && $values['offer_text'] === '')
+                || $values['hero_title'] === '' || $values['hero_text'] === ''
+                || !validImageUrl($values['hero_image_url'])
+                || !preg_match('~^(?:#[A-Za-z][A-Za-z0-9_-]*|/(?!/)[^\s]*)$~', $values['hero_cta_url'])) {
+                throw new DomainException('Enter valid homepage content, image URL, and a site-relative CTA link.');
+            }
+            $statement = database()->prepare('INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)');
+            foreach ($values as $key => $value) {
+                $statement->bind_param('ss', $key, $value);
+                $statement->execute();
+            }
+            $statement->close();
+            flash('success', 'Homepage offer and hero updated.');
+        } elseif ($action === 'toggle_coupon') {
             $code = strtoupper(trim((string) ($_POST['code'] ?? '')));
             $active = ($_POST['active'] ?? '') === '1' ? 1 : 0;
             if (!preg_match('/^[A-Z0-9_-]{3,30}$/', $code)) {
@@ -181,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (DomainException $error) {
         flash('error', $error->getMessage());
     } catch (Throwable $error) {
-        error_log('InbornFoot promotion admin error: ' . $error->getMessage());
+        error_log('InbornFood promotion admin error: ' . $error->getMessage());
         flash('error', 'The promotion could not be saved.');
     }
     header('Location: /admin/promotions.php');
@@ -189,6 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $coupons = $combos = $products = [];
+$homepage = ['offer_enabled' => '0', 'offer_text' => '', 'hero_eyebrow' => 'Traditional goodness, delivered', 'hero_title' => 'Food that still tastes like home.', 'hero_text' => 'Small-batch butter, aromatic ghee and natural palm jaggery, prepared with time-honoured methods by people who care.', 'hero_image_url' => '', 'hero_cta_label' => 'Shop the harvest', 'hero_cta_url' => '#products'];
 $databaseError = '';
 try {
     $coupons = database()->query(
@@ -209,9 +234,13 @@ try {
     $products = database()->query(
         'SELECT id, name, variant FROM products WHERE active = 1 ORDER BY name'
     )->fetch_all(MYSQLI_ASSOC);
+    $settingsResult = database()->query('SELECT setting_key, setting_value FROM site_settings');
+    while ($setting = $settingsResult->fetch_assoc()) {
+        if (array_key_exists($setting['setting_key'], $homepage)) $homepage[$setting['setting_key']] = (string) $setting['setting_value'];
+    }
 } catch (Throwable $error) {
-    error_log('InbornFoot promotions page error: ' . $error->getMessage());
-    $databaseError = 'Promotions are unavailable. Run database/migrate_promotions.sql first.';
+    error_log('InbornFood promotions page error: ' . $error->getMessage());
+    $databaseError = 'Promotions are unavailable. Run the promotions and homepage settings migrations first.';
 }
 $flash = takeFlash();
 ?>
@@ -220,17 +249,32 @@ $flash = takeFlash();
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
-  <title>Promotions | InbornFoot Admin</title><link rel="stylesheet" href="/admin/styles.css">
+  <title>Promotions | InbornFood Admin</title><link rel="stylesheet" href="/admin/styles.css">
 </head>
 <body>
   <header class="admin-header">
-    <a class="admin-brand" href="/admin/"><img src="/logo.png" alt="" width="44" height="44"><span><strong>InbornFoot</strong><small>Admin</small></span></a>
+    <a class="admin-brand" href="/admin/"><img src="/InbornFood_logo.jpeg" alt="InbornFood" width="44" height="44"><span><strong>InbornFood</strong><small>Admin</small></span></a>
     <div class="admin-actions"><a href="/admin/">Orders</a><a href="/admin/products.php">Products</a><form method="post" action="/admin/logout.php"><input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>"><button type="submit">Sign out</button></form></div>
   </header>
   <main class="dashboard">
     <div class="page-heading"><div><p class="eyebrow">Pricing</p><h1>Coupons & combos</h1><p>Coupons stack after automatic combo savings. Delivery is never discounted.</p></div></div>
     <?php if ($flash): ?><div class="alert alert-<?= h($flash['type']) ?>"><?= h($flash['message']) ?></div><?php endif; ?>
     <?php if ($databaseError): ?><div class="alert alert-error"><?= h($databaseError) ?></div><?php endif; ?>
+    <section class="product-editor">
+      <div class="editor-heading"><div><p class="eyebrow">Homepage</p><h2>Offer highlight & hero</h2><p>Publish an offer strip and control the homepage hero content and image.</p></div></div>
+      <form method="post" class="product-form">
+        <input type="hidden" name="action" value="save_homepage"><input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+        <label><span>Highlight offer</span><select name="offer_enabled"><option value="0" <?= $homepage['offer_enabled'] !== '1' ? 'selected' : '' ?>>Hidden</option><option value="1" <?= $homepage['offer_enabled'] === '1' ? 'selected' : '' ?>>Visible</option></select></label>
+        <label class="wide"><span>Offer text</span><input name="offer_text" maxlength="180" value="<?= h($homepage['offer_text']) ?>" placeholder="Summer offer: use WELCOME10 for 10% off"></label>
+        <label><span>Hero eyebrow</span><input name="hero_eyebrow" maxlength="100" value="<?= h($homepage['hero_eyebrow']) ?>"></label>
+        <label><span>Hero title</span><input name="hero_title" maxlength="140" value="<?= h($homepage['hero_title']) ?>" required></label>
+        <label class="wide"><span>Hero description</span><textarea name="hero_text" maxlength="300" rows="3" required><?= h($homepage['hero_text']) ?></textarea></label>
+        <label class="wide"><span>Hero image URL</span><input name="hero_image_url" maxlength="500" value="<?= h($homepage['hero_image_url']) ?>" placeholder="/assets/images/hero.jpg or https://..."></label>
+        <label><span>CTA label</span><input name="hero_cta_label" maxlength="60" value="<?= h($homepage['hero_cta_label']) ?>"></label>
+        <label><span>CTA link</span><input name="hero_cta_url" maxlength="200" value="<?= h($homepage['hero_cta_url']) ?>" required></label>
+        <div class="form-actions wide"><button class="primary-button" type="submit">Save homepage</button></div>
+      </form>
+    </section>
     <div class="promotion-grid">
       <section class="product-editor">
         <div class="editor-heading"><div><p class="eyebrow">Coupon</p><h2>Create or update coupon</h2></div></div>

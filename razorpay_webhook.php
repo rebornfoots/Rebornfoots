@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/includes/app_config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -17,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     webhookResponse(405, ['status' => 'error']);
 }
 
-$secret = getenv('F2H_RAZORPAY_WEBHOOK_SECRET') ?: '';
+$secret = (string) appConfig('F2H_RAZORPAY_WEBHOOK_SECRET');
 $signature = strtolower(trim((string) ($_SERVER['HTTP_X_RAZORPAY_SIGNATURE'] ?? '')));
 $eventId = trim((string) ($_SERVER['HTTP_X_RAZORPAY_EVENT_ID'] ?? ''));
 $rawBody = file_get_contents('php://input', false, null, 0, 262145);
@@ -74,10 +75,10 @@ if (in_array($eventType, $paymentEvents, true)) {
     }
 }
 
-$host = getenv('F2H_DB_HOST') ?: '';
-$name = getenv('F2H_DB_NAME') ?: '';
-$user = getenv('F2H_DB_USER') ?: '';
-$password = getenv('F2H_DB_PASSWORD') ?: '';
+$host = (string) appConfig('F2H_DB_HOST');
+$name = (string) appConfig('F2H_DB_NAME');
+$user = (string) appConfig('F2H_DB_USER');
+$password = (string) appConfig('F2H_DB_PASSWORD');
 if ($host === '' || $name === '' || $user === '') {
     webhookResponse(503, ['status' => 'error']);
 }
@@ -233,7 +234,7 @@ try {
             $update->close();
         }
         $database->commit();
-        error_log("InbornFoot: captured payment {$paymentId} needs refund for cancelled order #{$orderId}.");
+            error_log("InbornFood: captured payment {$paymentId} needs refund for cancelled order #{$orderId}.");
         webhookResponse(200, ['status' => 'refund_required']);
     }
 
@@ -293,12 +294,12 @@ try {
     if ($database instanceof mysqli) {
         try { $database->rollback(); } catch (Throwable) {}
     }
-    error_log('InbornFoot Razorpay webhook review: ' . $error->getMessage());
+        error_log('InbornFood Razorpay webhook review: ' . $error->getMessage());
     webhookResponse(409, ['status' => 'review_required']);
 } catch (Throwable $error) {
     if ($database instanceof mysqli) {
         try { $database->rollback(); } catch (Throwable) {}
     }
-    error_log('InbornFoot Razorpay webhook error: ' . $error->getMessage());
+    error_log('InbornFood Razorpay webhook error: ' . $error->getMessage());
     webhookResponse(500, ['status' => 'error']);
 }

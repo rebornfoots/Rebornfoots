@@ -18,8 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login
         } else {
             $username = trim((string) ($_POST['username'] ?? ''));
             $password = (string) ($_POST['password'] ?? '');
-            $expectedUsername = getenv('F2H_ADMIN_USERNAME') ?: '';
-            $passwordHash = getenv('F2H_ADMIN_PASSWORD_HASH') ?: '';
+            $expectedUsername = (string) appConfig('F2H_ADMIN_USERNAME');
+            $passwordHash = (string) appConfig('F2H_ADMIN_PASSWORD_HASH');
 
             if (hash_equals($expectedUsername, $username) && password_verify($password, $passwordHash)) {
                 session_regenerate_id(true);
@@ -54,15 +54,15 @@ if (!adminIsAuthenticated()) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
-  <title>Admin Login | InbornFoot</title>
+  <title>Admin Login | InbornFood</title>
   <link rel="stylesheet" href="/admin/styles.css">
 </head>
 <body class="login-page">
   <main class="login-shell">
     <section class="login-card">
-      <a class="admin-brand" href="/" aria-label="InbornFoot storefront">
-        <img src="/logo.png" alt="" width="54" height="54">
-        <span><strong>InbornFoot</strong><small>Store administration</small></span>
+      <a class="admin-brand" href="/" aria-label="InbornFood storefront">
+        <img src="/InbornFood_logo.jpeg" alt="InbornFood" width="54" height="54">
+        <span><strong>InbornFood</strong><small>Store administration</small></span>
       </a>
       <div class="login-heading">
         <p class="eyebrow">Secure access</p>
@@ -124,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'refun
             } catch (DomainException $error) {
                 flash('error', $error->getMessage());
             } catch (Throwable $error) {
-                error_log('InbornFoot admin refund error: ' . $error->getMessage());
+            error_log('InbornFood admin refund error: ' . $error->getMessage());
                 flash('error', $error->getMessage() === 'Razorpay could not start the refund. You can safely retry.'
                     ? $error->getMessage()
                     : 'The refund could not be started. Check the server log before retrying.');
@@ -155,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             } catch (DomainException $error) {
                 flash('error', $error->getMessage());
             } catch (Throwable $error) {
-                error_log('InbornFoot admin update error: ' . $error->getMessage());
+            error_log('InbornFood admin update error: ' . $error->getMessage());
                 flash('error', 'The order could not be updated.');
             }
         }
@@ -190,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             } catch (DomainException $error) {
                 flash('error', $error->getMessage());
             } catch (Throwable $error) {
-                error_log('InbornFoot delivery update error: ' . $error->getMessage());
+            error_log('InbornFood delivery update error: ' . $error->getMessage());
                 flash('error', 'The delivery details could not be saved.');
             }
         }
@@ -245,7 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manag
                     flash('success', "Delivery override saved for PIN code {$pincode}.");
                 }
             } catch (Throwable $error) {
-                error_log('InbornFoot pincode update error: ' . $error->getMessage());
+            error_log('InbornFood pincode update error: ' . $error->getMessage());
                 flash('error', 'The serviceable PIN code could not be updated.');
             }
         }
@@ -286,7 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manag
                     flash('success', "Delivery is now blocked for PIN code {$pincode}.");
                 }
             } catch (Throwable $error) {
-                error_log('InbornFoot blocked pincode update error: ' . $error->getMessage());
+            error_log('InbornFood blocked pincode update error: ' . $error->getMessage());
                 flash('error', 'The unsupported PIN code could not be updated.');
             }
         }
@@ -396,7 +396,7 @@ try {
         $historyStatement->close();
     }
 } catch (Throwable $error) {
-    error_log('InbornFoot admin dashboard error: ' . $error->getMessage());
+    error_log('InbornFood admin dashboard error: ' . $error->getMessage());
     $databaseError = 'Orders are temporarily unavailable. Check the database configuration.';
     $totalPages = 1;
 }
@@ -414,14 +414,14 @@ $currentQuery = http_build_query(array_filter([
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
-  <title>Orders | InbornFoot Admin</title>
+  <title>Orders | InbornFood Admin</title>
   <link rel="stylesheet" href="/admin/styles.css">
 </head>
 <body>
   <header class="admin-header">
     <a class="admin-brand" href="/admin/">
-      <img src="/logo.png" alt="" width="44" height="44">
-      <span><strong>InbornFoot</strong><small>Admin</small></span>
+      <img src="/InbornFood_logo.jpeg" alt="InbornFood" width="44" height="44">
+      <span><strong>InbornFood</strong><small>Admin</small></span>
     </a>
     <div class="admin-actions">
       <a href="/admin/products.php">Products</a>

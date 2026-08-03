@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/includes/app_config.php';
+
 const ADMIN_STATUSES = ['pending', 'confirmed', 'paid', 'packed', 'shipped', 'delivered', 'cancelled'];
 
 ini_set('session.use_strict_mode', '1');
@@ -11,7 +13,7 @@ ini_set('session.cookie_samesite', 'Strict');
 $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
     || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 
-session_name('INBORNFOOT_ADMIN');
+session_name('INBORNFOOD_ADMIN');
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/admin',
@@ -34,8 +36,8 @@ function h(mixed $value): string
 
 function adminIsConfigured(): bool
 {
-    return (getenv('F2H_ADMIN_USERNAME') ?: '') !== ''
-        && (getenv('F2H_ADMIN_PASSWORD_HASH') ?: '') !== '';
+    return appConfig('F2H_ADMIN_USERNAME') !== ''
+        && appConfig('F2H_ADMIN_PASSWORD_HASH') !== '';
 }
 
 function adminIsAuthenticated(): bool
@@ -77,10 +79,10 @@ function database(): mysqli
         return $database;
     }
 
-    $host = getenv('F2H_DB_HOST') ?: '';
-    $name = getenv('F2H_DB_NAME') ?: '';
-    $user = getenv('F2H_DB_USER') ?: '';
-    $password = getenv('F2H_DB_PASSWORD') ?: '';
+    $host = (string) appConfig('F2H_DB_HOST');
+    $name = (string) appConfig('F2H_DB_NAME');
+    $user = (string) appConfig('F2H_DB_USER');
+    $password = (string) appConfig('F2H_DB_PASSWORD');
 
     if ($host === '' || $name === '' || $user === '') {
         throw new RuntimeException('Database environment variables are not configured.');
@@ -199,8 +201,8 @@ function updateDeliveryDetails(
 
 function requestRazorpayRefund(int $orderId): array
 {
-    $keyId = getenv('F2H_RAZORPAY_KEY_ID') ?: '';
-    $keySecret = getenv('F2H_RAZORPAY_KEY_SECRET') ?: '';
+    $keyId = (string) appConfig('F2H_RAZORPAY_KEY_ID');
+    $keySecret = (string) appConfig('F2H_RAZORPAY_KEY_SECRET');
     if ($keyId === '' || $keySecret === '') {
         throw new RuntimeException('Razorpay credentials are not configured.');
     }
@@ -246,7 +248,7 @@ function requestRazorpayRefund(int $orderId): array
         }
 
         $attemptCount = $existing ? (int) $existing['attempt_count'] + 1 : 1;
-        $idempotencyKey = 'inbornfoot-refund-' . $orderId . '-' . bin2hex(random_bytes(8));
+        $idempotencyKey = 'inbornfood-refund-' . $orderId . '-' . bin2hex(random_bytes(8));
         if ($existing) {
             $reserve = $database->prepare(
                 "UPDATE payment_refunds

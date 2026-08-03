@@ -61,20 +61,20 @@ try {
     $greeting = "Hello {$name},";
 
     $messages = [
-        'order_received' => "{$greeting}\n\nWe have received your InbornFoot order {$orderNumber} for {$total}. We will confirm it shortly.\n\nTrack your order: {$trackingUrl}",
-        'order_confirmed' => "{$greeting}\n\nYour InbornFoot order {$orderNumber} has been confirmed. We will notify you when it is packed.\n\nTrack your order: {$trackingUrl}",
-        'payment_confirmed' => "{$greeting}\n\nPayment of {$total} for your InbornFoot order {$orderNumber} has been confirmed securely. Thank you!\n\nTrack your order: {$trackingUrl}",
-        'order_packed' => "{$greeting}\n\nYour InbornFoot order {$orderNumber} is packed and getting ready for dispatch.\n\nTrack your order: {$trackingUrl}",
-        'order_delivered' => "{$greeting}\n\nYour InbornFoot order {$orderNumber} has been delivered. Thank you for choosing InbornFoot!",
-        'order_cancelled' => "{$greeting}\n\nYour InbornFoot order {$orderNumber} has been cancelled. If payment was collected, we will update you separately about the refund.",
-        'refund_pending' => "{$greeting}\n\nYour refund of {$total} for InbornFoot order {$orderNumber} has been initiated. We will notify you when Razorpay confirms completion.",
-        'refund_processed' => "{$greeting}\n\nYour refund of {$total} for InbornFoot order {$orderNumber} has been processed successfully. Your bank may take a few working days to reflect it.",
+        'order_received' => "{$greeting}\n\nWe have received your InbornFood order {$orderNumber} for {$total}. We will confirm it shortly.\n\nTrack your order: {$trackingUrl}",
+        'order_confirmed' => "{$greeting}\n\nYour InbornFood order {$orderNumber} has been confirmed. We will notify you when it is packed.\n\nTrack your order: {$trackingUrl}",
+        'payment_confirmed' => "{$greeting}\n\nPayment of {$total} for your InbornFood order {$orderNumber} has been confirmed securely. Thank you!\n\nTrack your order: {$trackingUrl}",
+        'order_packed' => "{$greeting}\n\nYour InbornFood order {$orderNumber} is packed and getting ready for dispatch.\n\nTrack your order: {$trackingUrl}",
+        'order_delivered' => "{$greeting}\n\nYour InbornFood order {$orderNumber} has been delivered. Thank you for choosing InbornFood!",
+        'order_cancelled' => "{$greeting}\n\nYour InbornFood order {$orderNumber} has been cancelled. If payment was collected, we will update you separately about the refund.",
+        'refund_pending' => "{$greeting}\n\nYour refund of {$total} for InbornFood order {$orderNumber} has been initiated. We will notify you when Razorpay confirms completion.",
+        'refund_processed' => "{$greeting}\n\nYour refund of {$total} for InbornFood order {$orderNumber} has been processed successfully. Your bank may take a few working days to reflect it.",
     ];
     if ($template === 'order_shipped') {
         $parts = [
             $greeting,
             '',
-            "Your InbornFoot order {$orderNumber} has been shipped.",
+            "Your InbornFood order {$orderNumber} has been shipped.",
         ];
         if ((string) $order['courier_name'] !== '') {
             $parts[] = 'Courier: ' . $order['courier_name'];
@@ -99,7 +99,7 @@ try {
     http_response_code(409);
     exit(h($error->getMessage()));
 } catch (Throwable $error) {
-    error_log('InbornFoot WhatsApp message error: ' . $error->getMessage());
+    error_log('InbornFood WhatsApp message error: ' . $error->getMessage());
     http_response_code(500);
     exit('The WhatsApp message could not be prepared.');
 }

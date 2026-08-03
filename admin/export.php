@@ -52,7 +52,7 @@ try {
     $result = $statement->get_result();
 
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="inbornfoot-orders-' . date('Y-m-d-His') . '.csv"');
+header('Content-Disposition: attachment; filename="inbornfood-orders-' . date('Y-m-d-His') . '.csv"');
     echo "\xEF\xBB\xBF";
     $output = fopen('php://output', 'wb');
     fputcsv($output, ['Order ID', 'Customer', 'Phone', 'Address', 'PIN Code', 'Payment Method', 'Payment Status', 'Gateway Order', 'Gateway Payment', 'Items', 'Subtotal', 'Delivery Fee', 'Coupon', 'Coupon Discount', 'Combo Discount', 'Total Discount', 'Total', 'Order Status', 'Courier', 'Tracking Number', 'Estimated Delivery', 'Created', 'Updated']);
@@ -98,7 +98,7 @@ try {
     fclose($output);
     $statement->close();
 } catch (Throwable $error) {
-    error_log('InbornFoot CSV export error: ' . $error->getMessage());
+    error_log('InbornFood CSV export error: ' . $error->getMessage());
     http_response_code(500);
     exit('The export could not be generated.');
 }

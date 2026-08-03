@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/includes/app_config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -60,12 +61,12 @@ if ($orderId === false || $orderId < 1
     paymentResponse(422, ['status' => 'error', 'message' => 'Invalid payment verification data.']);
 }
 
-$dbHost = getenv('F2H_DB_HOST') ?: '';
-$dbName = getenv('F2H_DB_NAME') ?: '';
-$dbUser = getenv('F2H_DB_USER') ?: '';
-$dbPassword = getenv('F2H_DB_PASSWORD') ?: '';
-$keyId = getenv('F2H_RAZORPAY_KEY_ID') ?: '';
-$keySecret = getenv('F2H_RAZORPAY_KEY_SECRET') ?: '';
+$dbHost = (string) appConfig('F2H_DB_HOST');
+$dbName = (string) appConfig('F2H_DB_NAME');
+$dbUser = (string) appConfig('F2H_DB_USER');
+$dbPassword = (string) appConfig('F2H_DB_PASSWORD');
+$keyId = (string) appConfig('F2H_RAZORPAY_KEY_ID');
+$keySecret = (string) appConfig('F2H_RAZORPAY_KEY_SECRET');
 if ($dbHost === '' || $dbName === '' || $dbUser === '' || $keyId === '' || $keySecret === '') {
     paymentResponse(503, ['status' => 'error', 'message' => 'Payment verification is temporarily unavailable.']);
 }
@@ -177,6 +178,6 @@ try {
     if ($database instanceof mysqli) {
         try { $database->rollback(); } catch (Throwable) {}
     }
-    error_log('InbornFoot payment verification error: ' . $error->getMessage());
+    error_log('InbornFood payment verification error: ' . $error->getMessage());
     paymentResponse(500, ['status' => 'error', 'message' => 'Payment verification failed. Please contact us with your order number.']);
 }

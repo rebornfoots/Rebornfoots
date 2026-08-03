@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/includes/app_config.php';
 
 require __DIR__ . '/includes/pricing.php';
 
@@ -50,8 +51,13 @@ function sendTelegram(string $message, string $botToken, string $chatId): void
             CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_TIMEOUT => 5,
         ]);
-        curl_exec($curl);
+        $response = curl_exec($curl);
+        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $curlError = curl_error($curl);
         curl_close($curl);
+        if ($response === false || $status < 200 || $status >= 300) {
+            error_log('InbornFood Telegram notification failed: ' . ($curlError !== '' ? $curlError : "HTTP {$status}"));
+        }
         return;
     }
 
@@ -63,7 +69,9 @@ function sendTelegram(string $message, string $botToken, string $chatId): void
             'timeout' => 5,
         ],
     ]);
-    @file_get_contents($url, false, $context);
+    if (@file_get_contents($url, false, $context) === false) {
+        error_log('InbornFood Telegram notification failed using the HTTP fallback.');
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -146,12 +154,12 @@ foreach ($items as $item) {
     $requestedItems[$productId] = $quantity;
 }
 
-$dbHost = getenv('F2H_DB_HOST') ?: '';
-$dbName = getenv('F2H_DB_NAME') ?: '';
-$dbUser = getenv('F2H_DB_USER') ?: '';
-$dbPassword = getenv('F2H_DB_PASSWORD') ?: '';
+$dbHost = (string) appConfig('F2H_DB_HOST');
+$dbName = (string) appConfig('F2H_DB_NAME');
+$dbUser = (string) appConfig('F2H_DB_USER');
+$dbPassword = (string) appConfig('F2H_DB_PASSWORD');
 if ($dbHost === '' || $dbName === '' || $dbUser === '') {
-    error_log('InbornFoot: database environment variables are not configured.');
+    error_log('InbornFood: database environment variables are not configured.');
     respond(503, ['status' => 'error', 'message' => 'Ordering is temporarily unavailable. Please contact us.']);
 }
 
@@ -380,18 +388,18 @@ try {
                 ]);
             }
         } catch (Throwable $retryError) {
-            error_log('InbornFoot retry lookup error: ' . $retryError->getMessage());
+            error_log('InbornFood retry lookup error: ' . $retryError->getMessage());
         }
     }
     if ($error instanceof DomainException) {
         respond(409, ['status' => 'error', 'message' => $error->getMessage()]);
     }
-    error_log('InbornFoot order error: ' . $error->getMessage());
+    error_log('InbornFood order error: ' . $error->getMessage());
     respond(500, ['status' => 'error', 'message' => 'We could not save your order. Please try again.']);
 }
 
 $lines = [
-    '🧺 <b>InbornFoot order</b>',
+    '🧺 <b>InbornFood order</b>',
     '',
     '🆔 <b>Order:</b> #' . $orderId,
     '👤 <b>Name:</b> ' . telegramEscape($name),
@@ -419,8 +427,8 @@ $lines[] = '💳 Payment: UPI details to be shared after confirmation';
 
 sendTelegram(
     implode("\n", $lines),
-    getenv('F2H_TELEGRAM_BOT_TOKEN') ?: '',
-    getenv('F2H_TELEGRAM_CHAT_ID') ?: ''
+    (string) appConfig('F2H_TELEGRAM_BOT_TOKEN'),
+    (string) appConfig('F2H_TELEGRAM_CHAT_ID')
 );
 
 respond(201, [

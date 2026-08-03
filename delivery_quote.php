@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/includes/app_config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -22,10 +23,10 @@ if (!preg_match('/^[1-9]\d{5}$/', $pincode)) {
     quoteResponse(422, ['status' => 'error', 'message' => 'Enter a valid 6-digit PIN code.']);
 }
 
-$host = getenv('F2H_DB_HOST') ?: '';
-$name = getenv('F2H_DB_NAME') ?: '';
-$user = getenv('F2H_DB_USER') ?: '';
-$password = getenv('F2H_DB_PASSWORD') ?: '';
+$host = (string) appConfig('F2H_DB_HOST');
+$name = (string) appConfig('F2H_DB_NAME');
+$user = (string) appConfig('F2H_DB_USER');
+$password = (string) appConfig('F2H_DB_PASSWORD');
 if ($host === '' || $name === '' || $user === '') {
     quoteResponse(503, ['status' => 'error', 'message' => 'Delivery quote is temporarily unavailable.']);
 }
@@ -66,6 +67,6 @@ try {
         'maxDays' => (int) ($zone['max_delivery_days'] ?? 5),
     ]);
 } catch (Throwable $error) {
-    error_log('InbornFoot delivery quote error: ' . $error->getMessage());
+    error_log('InbornFood delivery quote error: ' . $error->getMessage());
     quoteResponse(500, ['status' => 'error', 'message' => 'Delivery quote is temporarily unavailable.']);
 }

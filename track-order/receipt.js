@@ -28,7 +28,7 @@ document.querySelector("[data-buy-again]")?.addEventListener("click", async even
         .filter(product => product.purchasable && product.inStock !== false)
         .map(product => [product.id, product])
     );
-    const cart = JSON.parse(localStorage.getItem("inbornfoot_cart_v2") || "{}");
+  const cart = JSON.parse(localStorage.getItem("inbornfood_cart_v2") || "{}");
     let added = 0;
 
     for (const item of orderedItems) {
@@ -44,7 +44,7 @@ document.querySelector("[data-buy-again]")?.addEventListener("click", async even
     }
 
     if (!added) throw new Error("These products are not currently available.");
-    localStorage.setItem("inbornfoot_cart_v2", JSON.stringify(cart));
+  localStorage.setItem("inbornfood_cart_v2", JSON.stringify(cart));
     window.location.assign("/#products");
   } catch (error) {
     button.disabled = false;

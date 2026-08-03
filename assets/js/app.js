@@ -8,7 +8,7 @@ let PRODUCTS = {
   "buffalo-ghee-1l": { name: "Village-Style Ghee", variant: "1 litre · 2 × 500 ml", price: 1050 }
 };
 
-const STORAGE_KEY = "inbornfoot_cart_v2";
+const STORAGE_KEY = "inbornfood_cart_v2";
 let cart = loadCart();
 let checkoutRequestId = null;
 let toastTimer;
@@ -17,6 +17,12 @@ let deliveryQuoteTimer;
 let deliveryQuoteSequence = 0;
 
 const elements = {
+  offerAnnouncement: document.querySelector("#offerAnnouncement"),
+  heroEyebrow: document.querySelector("#heroEyebrow"),
+  heroTitle: document.querySelector("#heroTitle"),
+  heroText: document.querySelector("#heroText"),
+  heroCta: document.querySelector("#heroCta"),
+  heroImage: document.querySelector(".hero-image"),
   cartTrigger: document.querySelector("#cartTrigger"),
   cartDrawer: document.querySelector("#cartDrawer"),
   drawerBackdrop: document.querySelector("#drawerBackdrop"),
@@ -52,6 +58,28 @@ const elements = {
   comboSection: document.querySelector("#combos"),
   comboGrid: document.querySelector("#comboGrid")
 };
+
+async function loadHomepageSettings() {
+  try {
+    const response = await fetch("homepage_settings.php", { headers: { "Accept": "application/json" } });
+    const result = await response.json();
+    if (!response.ok || result.status !== "success") return;
+    const settings = result.settings || {};
+    if (settings.offer_enabled === "1" && settings.offer_text) {
+      elements.offerAnnouncement.textContent = settings.offer_text;
+      elements.offerAnnouncement.hidden = false;
+    }
+    if (settings.hero_eyebrow) elements.heroEyebrow.textContent = settings.hero_eyebrow;
+    if (settings.hero_title) elements.heroTitle.textContent = settings.hero_title;
+    if (settings.hero_text) elements.heroText.textContent = settings.hero_text;
+    if (settings.hero_cta_label) elements.heroCta.textContent = settings.hero_cta_label;
+    if (settings.hero_cta_url) elements.heroCta.href = settings.hero_cta_url;
+    const imageUrl = safeImageUrl(settings.hero_image_url || "");
+    if (imageUrl) elements.heroImage.style.backgroundImage = `linear-gradient(180deg, transparent 55%, rgba(16,58,40,.25)), url("${imageUrl}")`;
+  } catch {
+    // Static content remains available when database settings are unavailable.
+  }
+}
 
 function loadCart() {
   try {
@@ -630,6 +658,7 @@ document.addEventListener("keydown", event => {
 document.querySelector("#currentYear").textContent = new Date().getFullYear();
 renderCart();
 (async () => {
+  await loadHomepageSettings();
   await loadProducts();
   await loadCombos();
 })();

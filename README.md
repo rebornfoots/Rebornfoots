@@ -1,4 +1,4 @@
-# InbornFoot
+# InbornFood
 
 A lightweight, responsive storefront for traditional South Indian dairy products
 and palm jaggery. The frontend uses semantic HTML, custom CSS and vanilla

@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once dirname(__DIR__) . '/includes/app_config.php';
 
 ini_set('session.use_strict_mode', '1');
 ini_set('session.use_only_cookies', '1');
@@ -8,7 +9,7 @@ ini_set('session.cookie_samesite', 'Strict');
 
 $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
     || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-session_name('INBORNFOOT_TRACKING');
+session_name('INBORNFOOD_TRACKING');
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/track-order',
@@ -97,10 +98,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'We could not find an order matching those details.';
         } else {
             try {
-                $host = getenv('F2H_DB_HOST') ?: '';
-                $name = getenv('F2H_DB_NAME') ?: '';
-                $user = getenv('F2H_DB_USER') ?: '';
-                $password = getenv('F2H_DB_PASSWORD') ?: '';
+                $host = (string) appConfig('F2H_DB_HOST');
+                $name = (string) appConfig('F2H_DB_NAME');
+                $user = (string) appConfig('F2H_DB_USER');
+                $password = (string) appConfig('F2H_DB_PASSWORD');
                 if ($host === '' || $name === '' || $user === '') {
                     throw new RuntimeException('Database configuration is missing.');
                 }
@@ -138,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $database->close();
             } catch (Throwable $exception) {
-                error_log('InbornFoot tracking error: ' . $exception->getMessage());
+            error_log('InbornFood tracking error: ' . $exception->getMessage());
                 $error = 'Order tracking is temporarily unavailable. Please try again shortly.';
             }
         }
@@ -173,15 +174,15 @@ $reorderItems = $order
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="theme-color" content="#174f35">
-  <title>Track Your Order | InbornFoot</title>
+  <title>Track Your Order | InbornFood</title>
   <link rel="stylesheet" href="/track-order/styles.css">
   <script src="/track-order/receipt.js" defer></script>
 </head>
 <body>
   <header class="tracking-header">
     <a class="brand" href="/">
-      <img src="/logo.png" width="48" height="48" alt="">
-      <span><strong>InbornFoot</strong><small>From farm. With care.</small></span>
+          <img src="/InbornFood_logo.jpeg" width="48" height="48" alt="InbornFood">
+          <span><strong>InbornFood</strong><small>From farm. With care.</small></span>
     </a>
     <a href="/">← Back to store</a>
   </header>
@@ -297,6 +298,6 @@ $reorderItems = $order
     </section>
   </main>
 
-  <footer>© <?= date('Y') ?> InbornFoot. Your order details are protected.</footer>
+  <footer>© <?= date('Y') ?> InbornFood. Your order details are protected.</footer>
 </body>
 </html>

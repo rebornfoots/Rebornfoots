@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/includes/app_config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -10,19 +11,19 @@ $checks = [
     'curl' => extension_loaded('curl'),
     'mysqli' => extension_loaded('mysqli'),
     'mbstring' => extension_loaded('mbstring'),
-    'database_config' => (getenv('F2H_DB_HOST') ?: '') !== ''
-        && (getenv('F2H_DB_NAME') ?: '') !== ''
-        && (getenv('F2H_DB_USER') ?: '') !== '',
+    'database_config' => appConfig('F2H_DB_HOST') !== ''
+        && appConfig('F2H_DB_NAME') !== ''
+        && appConfig('F2H_DB_USER') !== '',
 ];
 
 if ($checks['database_config'] && $checks['mysqli']) {
     try {
         mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
         $database = new mysqli(
-            getenv('F2H_DB_HOST') ?: '',
-            getenv('F2H_DB_USER') ?: '',
-            getenv('F2H_DB_PASSWORD') ?: '',
-            getenv('F2H_DB_NAME') ?: ''
+            (string) appConfig('F2H_DB_HOST'),
+            (string) appConfig('F2H_DB_USER'),
+            (string) appConfig('F2H_DB_PASSWORD'),
+            (string) appConfig('F2H_DB_NAME')
         );
         $database->set_charset('utf8mb4');
         $database->query('SELECT 1');

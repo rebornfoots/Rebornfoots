@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statement->close();
                 flash('success', $active ? 'Product published.' : 'Product hidden from the store.');
             } catch (Throwable $error) {
-                error_log('InbornFoot product toggle error: ' . $error->getMessage());
+                error_log('InbornFood product toggle error: ' . $error->getMessage());
                 flash('error', 'The product could not be updated.');
             }
         }
@@ -196,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: /admin/products.php?edit=' . rawurlencode($id));
             exit;
         } catch (Throwable $error) {
-            error_log('InbornFoot product save error: ' . $error->getMessage());
+            error_log('InbornFood product save error: ' . $error->getMessage());
             $_SESSION['product_form'] = $_POST;
             flash('error', 'The product could not be saved. Check that its ID and URL slug are unique.');
             header('Location: /admin/products.php?' . http_build_query(['edit' => $originalId ?: 'new']));
@@ -215,7 +215,7 @@ try {
          FROM products ORDER BY sort_order, name'
     )->fetch_all(MYSQLI_ASSOC);
 } catch (Throwable $error) {
-    error_log('InbornFoot products admin error: ' . $error->getMessage());
+    error_log('InbornFood products admin error: ' . $error->getMessage());
     $databaseError = 'Products are unavailable. Run database/migrate_products.sql first.';
 }
 
@@ -275,14 +275,14 @@ $lowStockCount = count(array_filter(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
-  <title>Products | InbornFoot Admin</title>
+  <title>Products | InbornFood Admin</title>
   <link rel="stylesheet" href="/admin/styles.css">
 </head>
 <body>
   <header class="admin-header">
     <a class="admin-brand" href="/admin/">
-      <img src="/logo.png" alt="" width="44" height="44">
-      <span><strong>InbornFoot</strong><small>Admin</small></span>
+      <img src="/InbornFood_logo.jpeg" alt="InbornFood" width="44" height="44">
+      <span><strong>InbornFood</strong><small>Admin</small></span>
     </a>
     <div class="admin-actions">
       <a href="/admin/">Orders</a>

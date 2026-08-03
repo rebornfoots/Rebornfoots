@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/includes/app_config.php';
 
 require __DIR__ . '/includes/pricing.php';
 
@@ -43,10 +44,10 @@ foreach ($items as $item) {
     $requestedItems[$productId] = $quantity;
 }
 
-$host = getenv('F2H_DB_HOST') ?: '';
-$name = getenv('F2H_DB_NAME') ?: '';
-$user = getenv('F2H_DB_USER') ?: '';
-$password = getenv('F2H_DB_PASSWORD') ?: '';
+$host = (string) appConfig('F2H_DB_HOST');
+$name = (string) appConfig('F2H_DB_NAME');
+$user = (string) appConfig('F2H_DB_USER');
+$password = (string) appConfig('F2H_DB_PASSWORD');
 if ($host === '' || $name === '' || $user === '') {
     pricingResponse(503, ['status' => 'error', 'message' => 'Pricing is temporarily unavailable.']);
 }
@@ -138,6 +139,6 @@ try {
 } catch (DomainException $error) {
     pricingResponse(422, ['status' => 'error', 'message' => $error->getMessage()]);
 } catch (Throwable $error) {
-    error_log('InbornFoot pricing quote error: ' . $error->getMessage());
+    error_log('InbornFood pricing quote error: ' . $error->getMessage());
     pricingResponse(500, ['status' => 'error', 'message' => 'Pricing is temporarily unavailable.']);
 }

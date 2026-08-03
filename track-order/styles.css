@@ -120,7 +120,7 @@ footer { padding: 25px; color: var(--muted); text-align: center; font-size: 10px
   .tracking-header, .lookup-panel, .help-band, footer, .print-receipt, .buy-again, #reorder-items { display: none !important; }
   main { width: 100%; margin: 0; padding: 0; }
   .result-panel { overflow: visible; margin: 0; border: 1px solid #bbb; border-radius: 0; box-shadow: none; }
-  .result-panel::before { display: block; padding: 22px 28px 0; color: #174f35; content: "InbornFoot • Order receipt"; font: 700 20px Georgia, serif; }
+.result-panel::before { display: block; padding: 22px 28px 0; color: #174f35; content: "InbornFood • Order receipt"; font: 700 20px Georgia, serif; }
   .result-heading { padding: 18px 28px; }
   .timeline { padding: 24px 28px; }
   .order-summary { grid-template-columns: 1fr 260px; break-inside: avoid; }

@@ -1,4 +1,4 @@
-# InbornFoot Test Deployment
+# InbornFood Test Deployment
 
 ## Hosting requirements
 
