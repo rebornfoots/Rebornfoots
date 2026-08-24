@@ -209,7 +209,7 @@ footer > p { grid-column: 1 / -1; margin: 0; padding-top: 25px; border-top: 1px 
 .success-reminder { font-size: 11px; }
 .success-actions { display: grid; gap: 9px; margin-top: 21px; }
 .success-close { color: var(--forest); background: #e8f0ea; }
-.button:disabled { cursor: wait; opacity: .65; transform: none; }
+.button:disabled { cursor: not-allowed; opacity: .65; transform: none; }
 .toast { position: fixed; z-index: 100; right: 25px; bottom: 25px; max-width: calc(100% - 50px); padding: 13px 18px; color: #fff; background: var(--forest-dark); border-radius: 12px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transform: translateY(15px); transition: .25s; }
 .toast.show { opacity: 1; transform: none; }
 

@@ -111,6 +111,11 @@ courier, tracking-number, tracking-link and estimated-delivery details.
 Run `database/migrate_delivery_serviceability.sql` once to capture delivery PIN
 codes and manage checkout coverage from the admin dashboard. With no configured
 coverage entries, all valid Indian PIN codes remain accepted.
+Run `database/migrate_state_delivery_pricing.sql` to enable automatic state lookup
+from the customer's PIN code. Lookups are cached locally. State rates are seeded as
+Tamil Nadu ₹80 (2–4 working days), Kerala/Karnataka/Telangana ₹90 (3–5 working
+days), and ₹500 (5–8 working days) for every other state. A PIN-specific rule in
+`delivery_pincodes` still takes precedence, and blocked PIN codes remain unavailable.
 Run `database/migrate_razorpay_payments.sql` once before enabling Razorpay. Set
 `F2H_RAZORPAY_KEY_ID` and `F2H_RAZORPAY_KEY_SECRET` as server environment
 variables. Checkout creates the Razorpay order on the server and marks an order

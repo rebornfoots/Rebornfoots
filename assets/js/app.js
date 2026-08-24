@@ -135,6 +135,7 @@ function renderCheckoutTotal() {
 
 function resetDeliveryQuote(message = "Enter your PIN code to check delivery.") {
   deliveryQuoteState = null;
+  elements.placeOrderButton.disabled = true;
   elements.deliveryQuote.textContent = message;
   elements.deliveryQuote.className = "delivery-quote";
   elements.promotionMessage.textContent = "Combo offers apply automatically.";
@@ -144,6 +145,7 @@ function resetDeliveryQuote(message = "Enter your PIN code to check delivery.") 
 
 async function loadDeliveryQuote(pincode) {
   const sequence = ++deliveryQuoteSequence;
+  elements.placeOrderButton.disabled = true;
   elements.deliveryQuote.textContent = "Checking delivery…";
   elements.deliveryQuote.className = "delivery-quote";
   try {
@@ -170,17 +172,21 @@ async function loadDeliveryQuote(pincode) {
       minDays: Number(result.minDays),
       maxDays: Number(result.maxDays),
       areaName: result.areaName || "",
+      district: result.district || "",
+      state: result.state || "",
       comboDiscount: Number(result.comboDiscount) || 0,
       couponDiscount: Number(result.couponDiscount) || 0,
       discountTotal: Number(result.discountTotal) || 0,
       couponCode: result.couponCode || "",
       combos: Array.isArray(result.combos) ? result.combos : []
     };
-    const area = deliveryQuoteState.areaName ? `${deliveryQuoteState.areaName} · ` : "";
+    const location = [deliveryQuoteState.district, deliveryQuoteState.state].filter(Boolean).join(", ");
+    const area = location ? `${location} · ` : "";
     const fee = deliveryQuoteState.deliveryFee > 0 ? money(deliveryQuoteState.deliveryFee) : "Free delivery";
     elements.deliveryQuote.textContent =
-      `${area}${fee} · Estimated ${deliveryQuoteState.minDays}–${deliveryQuoteState.maxDays} days`;
+      `${area}${fee} · Estimated ${deliveryQuoteState.minDays}–${deliveryQuoteState.maxDays} working days`;
     elements.deliveryQuote.className = "delivery-quote success";
+    elements.placeOrderButton.disabled = false;
     const messages = [];
     if (deliveryQuoteState.combos.length) {
       messages.push(`Combo savings ${money(deliveryQuoteState.comboDiscount)} applied`);
@@ -197,6 +203,7 @@ async function loadDeliveryQuote(pincode) {
   } catch (error) {
     if (sequence !== deliveryQuoteSequence) return null;
     deliveryQuoteState = null;
+    elements.placeOrderButton.disabled = true;
     const couponAttempted = elements.couponCode.value.trim() !== "";
     const messageElement = couponAttempted ? elements.promotionMessage : elements.deliveryQuote;
     messageElement.textContent = error.message;
@@ -586,7 +593,11 @@ async function submitOrder(event) {
     elements.formMessage.textContent = error.message;
     elements.formMessage.hidden = false;
   } finally {
-    elements.placeOrderButton.disabled = false;
+    const currentPincode = elements.customerPincode.value.trim();
+    const currentCoupon = elements.couponCode.value.trim().toUpperCase();
+    elements.placeOrderButton.disabled = !deliveryQuoteState
+      || deliveryQuoteState.pincode !== currentPincode
+      || deliveryQuoteState.couponCode !== currentCoupon;
     elements.placeOrderButton.textContent = "Place order";
   }
 }
@@ -644,6 +655,7 @@ elements.applyCouponButton.addEventListener("click", () => {
 elements.couponCode.addEventListener("input", () => {
   checkoutRequestId = null;
   deliveryQuoteState = null;
+  elements.placeOrderButton.disabled = true;
   elements.promotionMessage.textContent = "Click Apply to validate this coupon.";
   elements.promotionMessage.className = "delivery-quote";
   renderCheckoutTotal();

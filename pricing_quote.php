@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/includes/app_config.php';
+require_once __DIR__ . '/includes/delivery.php';
 
 require __DIR__ . '/includes/pricing.php';
 
@@ -57,38 +58,15 @@ try {
     $database = new mysqli($host, $user, $password, $name);
     $database->set_charset('utf8mb4');
 
-    $deliveryFee = 0.0;
-    $areaName = '';
-    $minDays = 3;
-    $maxDays = 5;
-    $blockedStatement = $database->prepare(
-        'SELECT reason FROM delivery_blocked_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
-    );
-    $blockedStatement->bind_param('s', $pincode);
-    $blockedStatement->execute();
-    $blocked = $blockedStatement->get_result()->fetch_assoc();
-    $blockedStatement->close();
-    if ($blocked) {
-        pricingResponse(422, [
-            'status' => 'error',
-            'serviceable' => false,
-            'message' => 'Delivery is not currently available for this PIN code.',
-        ]);
+    try {
+        $delivery = deliveryQuoteForPincode($database, $pincode);
+    } catch (DomainException $error) {
+        pricingResponse(422, ['status' => 'error', 'serviceable' => false, 'message' => $error->getMessage()]);
     }
-    $zoneStatement = $database->prepare(
-            'SELECT area_name, delivery_fee, min_delivery_days, max_delivery_days
-             FROM delivery_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
-    );
-    $zoneStatement->bind_param('s', $pincode);
-    $zoneStatement->execute();
-    $zone = $zoneStatement->get_result()->fetch_assoc();
-    $zoneStatement->close();
-    if ($zone) {
-        $areaName = (string) $zone['area_name'];
-        $deliveryFee = (float) $zone['delivery_fee'];
-        $minDays = (int) $zone['min_delivery_days'];
-        $maxDays = (int) $zone['max_delivery_days'];
-    }
+    $deliveryFee = $delivery['deliveryFee'];
+    $areaName = $delivery['areaName'];
+    $minDays = $delivery['minDays'];
+    $maxDays = $delivery['maxDays'];
 
     $productIds = array_keys($requestedItems);
     $placeholders = implode(',', array_fill(0, count($productIds), '?'));
@@ -124,6 +102,8 @@ try {
         'status' => 'success',
         'serviceable' => true,
         'areaName' => $areaName,
+        'district' => $delivery['district'],
+        'state' => $delivery['state'],
         'minDays' => $minDays,
         'maxDays' => $maxDays,
         'subtotal' => $subtotal,

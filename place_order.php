@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/includes/app_config.php';
+require_once __DIR__ . '/includes/delivery.php';
 
 require __DIR__ . '/includes/pricing.php';
 
@@ -200,35 +201,14 @@ try {
         ]);
     }
 
-    $deliveryFee = 0.0;
-    $minDeliveryDays = 3;
-    $maxDeliveryDays = 5;
-    $blockedStatement = $database->prepare(
-        'SELECT reason FROM delivery_blocked_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
-    );
-    $blockedStatement->bind_param('s', $pincode);
-    $blockedStatement->execute();
-    $blocked = $blockedStatement->get_result()->fetch_assoc();
-    $blockedStatement->close();
-    if ($blocked) {
-        respond(422, [
-            'status' => 'error',
-            'message' => 'Delivery is not currently available for this PIN code.',
-        ]);
+    try {
+        $delivery = deliveryQuoteForPincode($database, $pincode);
+    } catch (DomainException $error) {
+        respond(422, ['status' => 'error', 'message' => $error->getMessage()]);
     }
-    $zoneStatement = $database->prepare(
-            'SELECT delivery_fee, min_delivery_days, max_delivery_days
-             FROM delivery_pincodes WHERE pincode = ? AND active = 1 LIMIT 1'
-    );
-    $zoneStatement->bind_param('s', $pincode);
-    $zoneStatement->execute();
-    $zone = $zoneStatement->get_result()->fetch_assoc();
-    $zoneStatement->close();
-    if ($zone) {
-        $deliveryFee = (float) $zone['delivery_fee'];
-        $minDeliveryDays = (int) $zone['min_delivery_days'];
-        $maxDeliveryDays = (int) $zone['max_delivery_days'];
-    }
+    $deliveryFee = $delivery['deliveryFee'];
+    $minDeliveryDays = $delivery['minDays'];
+    $maxDeliveryDays = $delivery['maxDays'];
 
     // Product identity, availability and prices always come from MySQL.
     $productIds = array_keys($requestedItems);
@@ -285,9 +265,7 @@ try {
     $database->begin_transaction();
     $transactionStarted = true;
     $orderDetails = json_encode(array_values($validatedItems), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-    $estimatedDeliveryDate = (new DateTimeImmutable('today'))
-        ->modify("+{$maxDeliveryDays} days")
-        ->format('Y-m-d');
+    $estimatedDeliveryDate = deliveryDateAfterWorkingDays($maxDeliveryDays);
     $promotionsJson = json_encode([
         'coupon' => $promotions['coupon'],
         'combos' => $promotions['combos'],

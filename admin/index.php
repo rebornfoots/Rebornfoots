@@ -254,6 +254,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manag
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_state_rate') {
+    if (!validCsrf($_POST['csrf_token'] ?? null)) {
+        flash('error', 'Your session expired. Please try again.');
+    } else {
+        $stateName = trim((string) ($_POST['state_name'] ?? ''));
+        $allowedStates = ['Tamil Nadu', 'Kerala', 'Karnataka', 'Telangana', '*'];
+        $deliveryFee = filter_var($_POST['delivery_fee'] ?? null, FILTER_VALIDATE_FLOAT);
+        $minDays = filter_var($_POST['min_delivery_days'] ?? null, FILTER_VALIDATE_INT);
+        $maxDays = filter_var($_POST['max_delivery_days'] ?? null, FILTER_VALIDATE_INT);
+        if (!in_array($stateName, $allowedStates, true)
+            || $deliveryFee === false || $deliveryFee < 0 || $deliveryFee > 10000
+            || $minDays === false || $minDays < 1 || $minDays > 30
+            || $maxDays === false || $maxDays < $minDays || $maxDays > 45
+        ) {
+            flash('error', 'Enter a valid delivery fee and working-day range.');
+        } else {
+            try {
+                $statement = database()->prepare(
+                    'INSERT INTO delivery_state_rates
+                     (state_name, delivery_fee, min_delivery_days, max_delivery_days, active)
+                     VALUES (?, ?, ?, ?, 1)
+                     ON DUPLICATE KEY UPDATE delivery_fee = VALUES(delivery_fee),
+                        min_delivery_days = VALUES(min_delivery_days),
+                        max_delivery_days = VALUES(max_delivery_days), active = 1'
+                );
+                $statement->bind_param('sdii', $stateName, $deliveryFee, $minDays, $maxDays);
+                $statement->execute();
+                $statement->close();
+                $label = $stateName === '*' ? 'All other states' : $stateName;
+                flash('success', "Delivery pricing updated for {$label}.");
+            } catch (Throwable $error) {
+                error_log('InbornFood state delivery rate update error: ' . $error->getMessage());
+                flash('error', 'The state delivery rate could not be updated. Run the state pricing migration first.');
+            }
+        }
+    }
+    header('Location: /admin/');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'manage_blocked_pincode') {
     if (!validCsrf($_POST['csrf_token'] ?? null)) {
         flash('error', 'Your session expired. Please try again.');
@@ -305,11 +345,22 @@ $databaseError = '';
 $orders = [];
 $deliveryZones = [];
 $blockedZones = [];
+$stateRates = [];
 $orderHistory = [];
 $totalOrders = 0;
 $metrics = ['today_orders' => 0, 'pending_orders' => 0, 'month_sales' => 0, 'month_orders' => 0];
 
 try {
+    try {
+        $stateRates = database()->query(
+            "SELECT state_name, delivery_fee, min_delivery_days, max_delivery_days
+             FROM delivery_state_rates
+             WHERE active = 1 AND state_name IN ('Tamil Nadu', 'Kerala', 'Karnataka', 'Telangana', '*')
+             ORDER BY FIELD(state_name, 'Tamil Nadu', 'Kerala', 'Karnataka', 'Telangana', '*')"
+        )->fetch_all(MYSQLI_ASSOC);
+    } catch (Throwable $error) {
+        error_log('InbornFood state delivery rates unavailable: ' . $error->getMessage());
+    }
     $deliveryZones = database()->query(
         'SELECT pincode, area_name, delivery_fee, min_delivery_days, max_delivery_days
          FROM delivery_pincodes WHERE active = 1 ORDER BY pincode'
@@ -457,8 +508,32 @@ $currentQuery = http_build_query(array_filter([
     <section class="serviceability-panel">
       <div>
         <p class="eyebrow">Delivery coverage</p>
+        <h2>State delivery rates</h2>
+        <p>Update customer delivery charges and estimates here. The default rule applies to every state not listed separately.</p>
+      </div>
+      <?php if ($stateRates === []): ?>
+        <div class="alert alert-error">State pricing is unavailable. Run the state delivery pricing migration first.</div>
+      <?php else: ?>
+        <div class="state-rate-list">
+          <?php foreach ($stateRates as $rate): ?>
+            <form method="post" action="/admin/" class="pincode-form state-rate-form">
+              <input type="hidden" name="action" value="update_state_rate">
+              <input type="hidden" name="csrf_token" value="<?= h(csrfToken()) ?>">
+              <input type="hidden" name="state_name" value="<?= h($rate['state_name']) ?>">
+              <strong><?= h($rate['state_name'] === '*' ? 'All other states' : $rate['state_name']) ?></strong>
+              <label><span>Fee ₹</span><input name="delivery_fee" type="number" min="0" max="10000" step="1" value="<?= h($rate['delivery_fee']) ?>" required></label>
+              <label><span>Minimum working days</span><input name="min_delivery_days" type="number" min="1" max="30" value="<?= h($rate['min_delivery_days']) ?>" required></label>
+              <label><span>Maximum working days</span><input name="max_delivery_days" type="number" min="1" max="45" value="<?= h($rate['max_delivery_days']) ?>" required></label>
+              <button type="submit">Update</button>
+            </form>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+      <div class="serviceability-divider"></div>
+      <div>
+        <p class="eyebrow">Special PIN-code rules</p>
         <h2>Delivery fee and timing overrides</h2>
-        <p>Every valid Indian PIN code is accepted by default with free delivery in 3–5 days. Add only special fee or timing rules here.</p>
+        <p>State pricing applies automatically. Add a rule here only when a specific PIN code needs a different fee or working-day estimate.</p>
       </div>
       <form method="post" action="/admin/" class="pincode-form">
         <input type="hidden" name="action" value="manage_pincode">
